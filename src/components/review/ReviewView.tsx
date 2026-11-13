@@ -30,7 +30,9 @@ import {
 } from "lucide-react";
 import type { AssetDTO, VersionDTO } from "@/lib/asset-dto";
 import type { CommentDTO, Person, Shape } from "@/lib/comment-dto";
-import { cn, formatBytes, timeAgo } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
+import { LangPicker, useI18n } from "../I18n";
+import { localeOf } from "@/lib/i18n";
 import { DEFAULT_FPS, frameOf, shortTime, type TcMode } from "@/lib/timecode";
 import { api, useToast, useConfirm, Menu, MenuItem, Modal } from "../ui";
 import { useUploadsOptional } from "../UploadManager";
@@ -115,6 +117,7 @@ export function ReviewView({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const { t, ago, lang } = useI18n();
   const { confirm, node: confirmNode } = useConfirm();
   // Bản mới đang xử lý thì mở bản cũ gần nhất đã xem được, xử lý xong tự chuyển sang bản mới
   const readyOf = (id?: string) => versions.find((x) => x.id === id)?.status === "READY";
@@ -178,25 +181,25 @@ export function ReviewView({
   const makeCurrent = async (x: VersionDTO) => {
     try {
       await api(`/api/versions/${x.id}`, { method: "PATCH", body: { current: true } });
-      toast(`V${x.versionNo} đã là bản hiện tại`);
+      toast(t("V{n} đã là bản hiện tại", { n: x.versionNo }));
       router.refresh();
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
     }
   };
   const removeVersion = async (x: VersionDTO) => {
     const ok = await confirm(
-      `Xoá V${x.versionNo}?`,
-      `Bản xem của V${x.versionNo} sẽ bị xoá, comment được chuyển sang phiên bản khác (gắn nhãn \"Từ V${x.versionNo}\"). File gốc trên Google Drive được chuyển vào Thùng rác của Drive (khôi phục được trong 30 ngày).`,
+      t("Xoá V{n}?", { n: x.versionNo }),
+      t("Bản xem của V{n} sẽ bị xoá, comment được chuyển sang phiên bản khác (gắn nhãn \"Từ V{n}\"). File gốc trên Google Drive được chuyển vào Thùng rác của Drive (khôi phục được trong 30 ngày).", { n: x.versionNo }),
     );
     if (!ok) return;
     try {
       await api(`/api/versions/${x.id}`, { method: "DELETE" });
-      toast(`Đã xoá V${x.versionNo}`);
+      toast(t("Đã xoá V{n}", { n: x.versionNo }));
       setVersionId(versions.find((y) => y.id !== x.id)?.id ?? versions[0].id);
       router.refresh();
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
     }
   };
 
@@ -223,7 +226,7 @@ export function ReviewView({
         await api(guest ? `/api/share/${guest.token}/versions/${id}/preview` : `/api/versions/${id}/preview`, { method: "POST" });
         router.refresh();
       } catch (e) {
-        toast((e as Error).message, "err");
+        toast(t((e as Error).message), "err");
       }
     },
     [guest, router, toast],
@@ -398,7 +401,7 @@ export function ReviewView({
       ? `${shortTime(inPt, fps, s.duration, tcMode)} → ${shortTime(outPt, fps, s.duration, tcMode)}`
       : shortTime(inPt ?? s.t, fps, s.duration, tcMode)
     : view === "pages"
-      ? `Trang ${page}`
+      ? t("Trang {n}", { n: page })
       : null;
 
   const anchorOf = (c: CommentDTO): Anchor => {
@@ -409,8 +412,8 @@ export function ReviewView({
           shortTime(c.timeStart, fps, s.duration, tcMode) +
           (c.timeEnd != null ? ` → ${shortTime(c.timeEnd, fps, s.duration, tcMode)}` : ""),
       };
-    if (c.page != null) return { icon: "page", label: `Trang ${c.page}` };
-    if (c.pinX != null) return { icon: "pin", label: "Ghim" };
+    if (c.page != null) return { icon: "page", label: t("Trang {n}", { n: c.page }) };
+    if (c.pinX != null) return { icon: "pin", label: t("Ghim") };
     return null;
   };
 
@@ -440,18 +443,18 @@ export function ReviewView({
       router.refresh();
       return true;
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
       return false;
     }
   };
   const reply = async (parentId: string, body: string) => {
     const gn = guest ? await needName() : null;
-    if (guest && !gn) throw new Error("Cần nhập tên");
+    if (guest && !gn) throw new Error(t("Cần nhập tên"));
     try {
       const r = await api<{ comment: CommentDTO }>(commentsUrl, { body: { versionId: v!.id, parentId, body, ...(guest ? { guestName: gn } : {}) } });
       setComments((x) => x.map((c) => (c.id === parentId ? { ...c, replies: [...c.replies, r.comment] } : c)));
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
       throw e;
     }
   };
@@ -466,11 +469,11 @@ export function ReviewView({
         ),
       );
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
     }
   };
   const remove = async (id: string, isReply: boolean) => {
-    const ok = await confirm("Xoá comment?", isReply ? "Trả lời này sẽ bị xoá." : "Comment và các trả lời của nó sẽ bị xoá.");
+    const ok = await confirm(t("Xoá comment?"), isReply ? t("Trả lời này sẽ bị xoá.") : t("Comment và các trả lời của nó sẽ bị xoá."));
     if (!ok) return;
     try {
       await api(`/api/comments/${id}`, { method: "DELETE" });
@@ -478,13 +481,13 @@ export function ReviewView({
       if (activeId === id) setActiveId(null);
       router.refresh();
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
     }
   };
   const copyLink = (c: CommentDTO) => {
     const url = guest ? `${location.origin}/s/${guest.token}/${asset.id}?c=${c.id}` : `${location.origin}/projects/${project.id}/assets/${asset.id}?c=${c.id}`;
     void navigator.clipboard?.writeText(url).then(
-      () => toast("Đã sao chép link comment"),
+      () => toast(t("Đã sao chép link comment")),
       () => toast(url),
     );
   };
@@ -625,8 +628,8 @@ export function ReviewView({
           ["rect", Square, "Hình chữ nhật"],
           ["ellipse", CircleIcon, "Hình tròn"],
         ] as const
-      ).map(([t, Icon, label]) => (
-        <button key={t} title={label} onClick={() => setTool(t)} className={cn("btn-icon", tool === t && "bg-accent/20 text-accent")}>
+      ).map(([k, Icon, label]) => (
+        <button key={k} title={t(label)} onClick={() => setTool(k)} className={cn("btn-icon", tool === k && "bg-accent/20 text-accent")}>
           <Icon size={16} />
         </button>
       ))}
@@ -637,14 +640,14 @@ export function ReviewView({
           onClick={() => setColor(c)}
           className={cn("size-5 rounded-full border-2", color === c ? "border-white" : "border-transparent")}
           style={{ background: c }}
-          aria-label={`Màu ${c}`}
+          aria-label={t("Màu {c}", { c })}
         />
       ))}
       <span className="mx-1 h-5 w-px bg-line-2" />
-      <button className="btn-icon" title="Hoàn tác" disabled={!shapes.length} onClick={() => setShapes((x) => x.slice(0, -1))}>
+      <button className="btn-icon" title={t("Hoàn tác")} disabled={!shapes.length} onClick={() => setShapes((x) => x.slice(0, -1))}>
         <Undo2 size={16} />
       </button>
-      <button className="btn-icon" title="Xoá hết nét vẽ" disabled={!shapes.length} onClick={() => setShapes([])}>
+      <button className="btn-icon" title={t("Xoá hết nét vẽ")} disabled={!shapes.length} onClick={() => setShapes([])}>
         <Trash2 size={16} />
       </button>
       <button
@@ -666,7 +669,7 @@ export function ReviewView({
       return (
         <div className="m-auto text-center text-sm text-mut">
           <AlertTriangle className="mx-auto mb-2 text-err" />
-          Xử lý file bị lỗi: {v.error}
+          {t("Xử lý file bị lỗi: {e}", { e: v.error ?? "" })}
         </div>
       );
     if (v.status !== "READY")
@@ -675,13 +678,13 @@ export function ReviewView({
           <Loader2 className="mx-auto mb-2 animate-spin text-accent" />
           {v.purged ? (
             <>
-              Đang tạo lại bản xem từ file gốc trên Google Drive{v.status === "PROCESSING" ? ` ${v.progress}%` : ""}…
-              <span className="mt-1 block text-xs">File này lâu không ai mở nên bản xem đã được dọn để tiết kiệm ổ đĩa.</span>
+              {t("Đang tạo lại bản xem từ file gốc trên Google Drive")}{v.status === "PROCESSING" ? ` ${v.progress}%` : ""}…
+              <span className="mt-1 block text-xs">{t("File này lâu không ai mở nên bản xem đã được dọn để tiết kiệm ổ đĩa.")}</span>
             </>
           ) : v.status === "PROCESSING" ? (
-            `Đang xử lý ${v.progress}%…`
+            t("Đang xử lý {p}%…", { p: v.progress })
           ) : (
-            "Đang chờ xử lý…"
+            t("Đang chờ xử lý…")
           )}
         </div>
       );
@@ -689,10 +692,10 @@ export function ReviewView({
       return (
         <div className="m-auto flex max-w-sm flex-col items-center gap-3 text-center text-sm text-mut">
           <KindIcon asset={asset} size={48} />
-          <p>File này lâu không ai mở nên bản xem đã được dọn để tiết kiệm ổ đĩa.</p>
-          {v.error && <p className="text-xs text-err">Lần tạo lại trước bị lỗi: {v.error}</p>}
+          <p>{t("File này lâu không ai mở nên bản xem đã được dọn để tiết kiệm ổ đĩa.")}</p>
+          {v.error && <p className="text-xs text-err">{t("Lần tạo lại trước bị lỗi: {e}", { e: v.error })}</p>}
           <button className="btn-primary" onClick={() => restorePreview(v.id)}>
-            <RefreshCw size={15} /> Tạo lại bản xem
+            <RefreshCw size={15} /> {t("Tạo lại bản xem")}
           </button>
         </div>
       );
@@ -700,10 +703,10 @@ export function ReviewView({
       return (
         <div className="m-auto flex flex-col items-center gap-3 text-center text-mut">
           <KindIcon asset={asset} size={48} />
-          <p className="text-sm">Loại file này chưa xem trực tiếp được. Bạn vẫn có thể comment chung bên phải.</p>
+          <p className="text-sm">{t("Loại file này chưa xem trực tiếp được. Bạn vẫn có thể comment chung bên phải.")}</p>
           {canDownload && (
             <a className="btn-primary" href={`${fileBase}/${v.id}/original`}>
-              <Download size={15} /> Tải về ({formatBytes(v.size)})
+              <Download size={15} /> {t("Tải về")} ({formatBytes(v.size)})
             </a>
           )}
         </div>
@@ -811,27 +814,27 @@ export function ReviewView({
 
   const infoList = v && (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 p-2 text-sm text-mut">
-      <dt>Phiên bản</dt>
+      <dt>{t("Phiên bản")}</dt>
       <dd className="text-fg">V{v.versionNo}</dd>
-      <dt>Tên gốc</dt>
+      <dt>{t("Tên gốc")}</dt>
       <dd className="max-w-56 break-all text-fg">{v.originalName}</dd>
-      <dt>Dung lượng</dt>
+      <dt>{t("Dung lượng")}</dt>
       <dd className="text-fg">{formatBytes(v.size)}</dd>
       {v.durationSec ? (
         <>
-          <dt>Thời lượng</dt>
+          <dt>{t("Thời lượng")}</dt>
           <dd className="text-fg">{formatDuration(v.durationSec)}</dd>
         </>
       ) : null}
       {v.fps ? (
         <>
-          <dt>Khung hình</dt>
+          <dt>{t("Khung hình")}</dt>
           <dd className="text-fg">{v.fps} fps</dd>
         </>
       ) : null}
       {v.width ? (
         <>
-          <dt>Độ phân giải</dt>
+          <dt>{t("Độ phân giải")}</dt>
           <dd className="text-fg">
             {v.width}×{v.height}
           </dd>
@@ -839,22 +842,22 @@ export function ReviewView({
       ) : null}
       {v.pageCount ? (
         <>
-          <dt>Số trang</dt>
+          <dt>{t("Số trang")}</dt>
           <dd className="text-fg">{v.pageCount}</dd>
         </>
       ) : null}
       {!guest && (
         <>
-          <dt>Upload bởi</dt>
+          <dt>{t("Upload bởi")}</dt>
           <dd className="text-fg">{v.uploadedBy}</dd>
         </>
       )}
-      <dt>Lúc</dt>
-      <dd className="text-fg">{new Date(v.createdAt).toLocaleString("vi-VN")}</dd>
+      <dt>{t("Lúc")}</dt>
+      <dd className="text-fg">{new Date(v.createdAt).toLocaleString(localeOf(lang))}</dd>
       {!guest && (
         <>
           <dt>Google Drive</dt>
-          <dd className={cn(v.onDrive ? "text-ok" : "text-mut")}>{v.onDrive ? "Đã lưu" : "Chưa lưu"}</dd>
+          <dd className={cn(v.onDrive ? "text-ok" : "text-mut")}>{v.onDrive ? t("Đã lưu") : t("Chưa lưu")}</dd>
         </>
       )}
     </dl>
@@ -880,7 +883,7 @@ export function ReviewView({
         </nav>
         {siblingIds.length > 1 && (
           <div className="flex items-center gap-1 text-sm text-mut">
-            <button className="btn-icon" disabled={idx <= 0} onClick={() => go(idx - 1)} aria-label="File trước">
+            <button className="btn-icon" disabled={idx <= 0} onClick={() => go(idx - 1)} aria-label={t("File trước")}>
               <ChevronLeft size={16} />
             </button>
             <span className="tabular-nums">
@@ -892,14 +895,14 @@ export function ReviewView({
           </div>
         )}
         {v && guest && (
-          <span className="rounded-md border border-line-2 px-2 py-1 text-xs font-semibold text-mut" title="Phiên bản">
+          <span className="rounded-md border border-line-2 px-2 py-1 text-xs font-semibold text-mut" title={t("Phiên bản")}>
             V{v.versionNo}
           </span>
         )}
         {v && !guest && (
           <Menu
             trigger={() => (
-              <span className="btn-outline h-8 cursor-pointer gap-1.5 px-2.5" title="Phiên bản">
+              <span className="btn-outline h-8 cursor-pointer gap-1.5 px-2.5" title={t("Phiên bản")}>
                 <Layers size={15} /> V{v.versionNo}
                 {versions.length > 1 && <span className="text-xs text-dim">/ {versions.length}</span>}
                 <ChevronDown size={14} className="text-dim" />
@@ -908,7 +911,7 @@ export function ReviewView({
           >
             {(close) => (
               <div className="w-72">
-                <p className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-dim">Phiên bản</p>
+                <p className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-dim">{t("Phiên bản")}</p>
                 {versions.map((x) => (
                   <button
                     key={x.id}
@@ -920,10 +923,10 @@ export function ReviewView({
                   >
                     <span className={cn("w-7 font-semibold", x.id === v.id ? "text-accent" : "text-fg")}>V{x.versionNo}</span>
                     <span className="min-w-0 flex-1 truncate text-xs text-mut">
-                      {x.uploadedBy ?? "?"} · {timeAgo(x.createdAt)}
+                      {x.uploadedBy ?? "?"} · {ago(x.createdAt)}
                     </span>
-                    {x.id === asset.version?.id && <span className="rounded bg-ok/15 px-1.5 text-[10px] font-medium text-ok">Hiện tại</span>}
-                    {x.status !== "READY" && <span className="text-[10px] text-warn">{x.status === "FAILED" ? "Lỗi" : "Đang xử lý"}</span>}
+                    {x.id === asset.version?.id && <span className="rounded bg-ok/15 px-1.5 text-[10px] font-medium text-ok">{t("Hiện tại")}</span>}
+                    {x.status !== "READY" && <span className="text-[10px] text-warn">{x.status === "FAILED" ? t("Lỗi") : t("Đang xử lý")}</span>}
                   </button>
                 ))}
                 <div className="my-1 h-px bg-line-2" />
@@ -970,7 +973,7 @@ export function ReviewView({
                     await api(`/api/assets/${asset.id}`, { method: "PATCH", body: { status: st } });
                     router.refresh();
                   } catch (e) {
-                    toast((e as Error).message, "err");
+                    toast(t((e as Error).message), "err");
                   }
                 }
               : undefined
@@ -978,7 +981,7 @@ export function ReviewView({
         />
         )}
         {!guest && v && (
-          <Menu trigger={() => <span className="btn-icon cursor-pointer" title="Xuất comment"><FileDown size={17} /></span>}>
+          <Menu trigger={() => <span className="btn-icon cursor-pointer" title={t("Xuất comment")}><FileDown size={17} /></span>}>
             {(close) => (
               <div className="w-64">
                 <p className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-dim">Xuất comment V{v.versionNo}</p>
@@ -1010,19 +1013,20 @@ export function ReviewView({
           </Menu>
         )}
         {!guest && canEdit && (
-          <button className="btn-icon" title="Chia sẻ cho khách" onClick={() => setShareOpen(true)}>
+          <button className="btn-icon" title={t("Chia sẻ cho khách")} onClick={() => setShareOpen(true)}>
             <Share2 size={17} />
           </button>
         )}
-        <Menu trigger={() => <span className="btn-icon cursor-pointer" title="Thông tin file"><Info size={17} /></span>}>
+        <Menu trigger={() => <span className="btn-icon cursor-pointer" title={t("Thông tin file")}><Info size={17} /></span>}>
           {() => infoList}
         </Menu>
-        <button className="btn-icon" title="Phím tắt (?)" onClick={() => setHelpOpen(true)}>
+        {guest && <LangPicker className="hidden sm:inline-flex" />}
+        <button className="btn-icon" title={t("Phím tắt (?)")} onClick={() => setHelpOpen(true)}>
           <Keyboard size={17} />
         </button>
         {v && canDownload && (
           <a className="btn-outline h-8" href={`${fileBase}/${v.id}/original`}>
-            <Download size={15} /> Tải gốc
+            <Download size={15} /> {t("Tải gốc")}
           </a>
         )}
       </header>
@@ -1034,18 +1038,18 @@ export function ReviewView({
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-lg bg-panel-2/90 px-2.5 py-1 text-xs text-mut backdrop-blur">
               <Loader2 size={13} className="animate-spin text-accent" />
               <span>
-                <b className="text-fg">V{pendingNewer[0].versionNo}</b> đang xử lý{" "}
-                {pendingNewer[0].status === "PROCESSING" ? `${pendingNewer[0].progress}%` : "(đang chờ)"} · bạn đang xem V{v?.versionNo}, xong sẽ tự chuyển
+                <b className="text-fg">V{pendingNewer[0].versionNo}</b> {t("đang xử lý")}{" "}
+                {pendingNewer[0].status === "PROCESSING" ? `${pendingNewer[0].progress}%` : t("(đang chờ)")} · {t("bạn đang xem V{n}, xong sẽ tự chuyển", { n: v?.versionNo ?? "" })}
               </span>
             </div>
           ) : v && asset.version && v.id !== asset.version.id && !drawing && !placingPin && (
             <div className="absolute left-3 top-3 z-10 rounded-lg bg-panel-2/90 px-2.5 py-1 text-xs text-mut backdrop-blur">
-              Đang xem <b className="text-fg">V{v.versionNo}</b> (bản cũ) · bản hiện tại là V{asset.version.versionNo}
+              {t("Đang xem")} <b className="text-fg">V{v.versionNo}</b> {t("(bản cũ) · bản hiện tại là V{n}", { n: asset.version.versionNo })}
             </div>
           )}
           {placingPin && (
             <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white shadow-lg">
-              Bấm vào vị trí cần ghim comment · Esc để huỷ
+              {t("Bấm vào vị trí cần ghim comment · Esc để huỷ")}
             </div>
           )}
           <div className="relative flex min-h-0 flex-1">{stage()}</div>
@@ -1101,7 +1105,7 @@ export function ReviewView({
           )}
           {view === "pages" && (
             <div className="flex shrink-0 items-center justify-center gap-2 border-t border-line bg-panel px-3 py-2 text-sm">
-              <button className="btn-icon" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Trang trước">
+              <button className="btn-icon" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t("Trang trước")}>
                 <ChevronLeft size={16} />
               </button>
               <span className="text-mut">Trang</span>
@@ -1119,7 +1123,7 @@ export function ReviewView({
                 <ChevronRight size={16} />
               </button>
               {v?.pageCount && v.pageCount > pageCount && (
-                <span className="text-xs text-dim">(hiển thị {pageCount} trang đầu, tải gốc để xem hết)</span>
+                <span className="text-xs text-dim">{t("(hiển thị {n} trang đầu, tải gốc để xem hết)", { n: pageCount })}</span>
               )}
             </div>
           )}
@@ -1167,7 +1171,7 @@ export function ReviewView({
         />
       </div>
 
-      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Phím tắt" width={420}>
+      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title={t("Phím tắt")} width={420}>
         <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           {[
             ["Space", "Phát / dừng"],
@@ -1184,7 +1188,7 @@ export function ReviewView({
           ].map(([k, d]) => (
             <div key={k} className="contents">
               <kbd className="rounded border border-line-2 bg-bg px-1.5 py-0.5 text-center font-mono text-xs">{k}</kbd>
-              <span className="text-mut">{d}</span>
+              <span className="text-mut">{t(d)}</span>
             </div>
           ))}
         </div>
@@ -1196,7 +1200,7 @@ export function ReviewView({
           nameAsk?.resolve(null);
           setNameAsk(null);
         }}
-        title="Bạn tên là gì?"
+        title={t("Bạn tên là gì?")}
         width={380}
       >
         <form
@@ -1209,10 +1213,10 @@ export function ReviewView({
             setNameAsk(null);
           }}
         >
-          <p className="mb-3 text-sm text-mut">Tên sẽ hiện cạnh comment của bạn để nhóm làm việc biết ai góp ý.</p>
-          <input className="input mb-4" autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={60} placeholder="Ví dụ: Chị Hoa - Công ty ABC" />
+          <p className="mb-3 text-sm text-mut">{t("Tên sẽ hiện cạnh comment của bạn để nhóm làm việc biết ai góp ý.")}</p>
+          <input className="input mb-4" autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} maxLength={60} placeholder={t("Ví dụ: Chị Hoa - Công ty ABC")} />
           <button className="btn-primary w-full" disabled={!nameDraft.trim()}>
-            Tiếp tục
+            {t("Tiếp tục")}
           </button>
         </form>
       </Modal>

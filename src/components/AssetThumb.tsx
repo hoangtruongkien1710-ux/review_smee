@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "./I18n";
 import { FileText, FileAudio, FileImage, FileVideo, File as FileIcon, Loader2, AlertTriangle, FileSpreadsheet, Presentation } from "lucide-react";
 import type { AssetDTO } from "@/lib/asset-dto";
 import { extOf } from "@/lib/kinds";
@@ -29,6 +30,7 @@ export function KindIcon({ asset, size = 28 }: { asset: Pick<AssetDTO, "kind" | 
 export function AssetThumb({ asset, onRetry, fileBase = "/api/files" }: { asset: AssetDTO; onRetry?: () => void; fileBase?: string }) {
   const v = asset.version;
   const [scrub, setScrub] = useState<number | null>(null);
+  const t = useT();
   const canScrub = !!(v?.spriteCols && v.spriteCount && v.status === "READY");
   const aspect = v?.width && v?.height ? v.width / v.height : 16 / 9;
 
@@ -74,14 +76,14 @@ export function AssetThumb({ asset, onRetry, fileBase = "/api/files" }: { asset:
       {v && (v.status === "QUEUED" || v.status === "PROCESSING" || v.status === "UPLOADING") && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-xs text-fg">
           <Loader2 size={20} className="animate-spin text-accent" />
-          {v.status === "PROCESSING" ? `Đang xử lý ${v.progress}%` : "Chờ xử lý…"}
+          {v.status === "PROCESSING" ? t("Đang xử lý {p}%", { p: v.progress }) : t("Chờ xử lý…")}
         </div>
       )}
       {v?.status === "FAILED" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/70 p-3 text-center text-xs">
           <AlertTriangle size={18} className="text-err" />
           <span className="line-clamp-2 text-[#ffb4c0]" title={v.error ?? ""}>
-            Xử lý lỗi
+            {t("Xử lý lỗi")}
           </span>
           {onRetry && (
             <button
@@ -92,7 +94,7 @@ export function AssetThumb({ asset, onRetry, fileBase = "/api/files" }: { asset:
                 onRetry();
               }}
             >
-              Thử lại
+              {t("Thử lại")}
             </button>
           )}
         </div>

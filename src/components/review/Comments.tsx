@@ -19,7 +19,9 @@ import {
   Trash2,
   MessageSquare,
 } from "lucide-react";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useI18n, useT } from "../I18n";
+import { localeOf } from "@/lib/i18n";
 import { MENTION_RE, type CommentDTO, type Person } from "@/lib/comment-dto";
 import { Avatar, Menu, MenuItem } from "../ui";
 
@@ -78,6 +80,7 @@ export function MentionInput({
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const own = useRef<HTMLTextAreaElement>(null);
+  const t = useT();
   const ref = inputRef ?? own;
   const [q, setQ] = useState<{ start: number; text: string } | null>(null);
   const [sel, setSel] = useState(0);
@@ -166,7 +169,7 @@ export function MentionInput({
             >
               <Avatar name={p.name} color={p.color} size={22} />
               <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              {p.client && <span className="text-[10px] text-warn">Khách</span>}
+              {p.client && <span className="text-[10px] text-warn">{t("Khách")}</span>}
             </button>
           ))}
         </div>
@@ -210,6 +213,8 @@ function Item({
   onDelete: (id: string, isReply: boolean) => void;
   onCopyLink: () => void;
 }) {
+  const { t, ago, lang } = useI18n();
+  const locale = localeOf(lang);
   const [replying, setReplying] = useState(false);
   const [reply, setReply] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -241,11 +246,11 @@ function Item({
     const mine = x.author?.id === me.id;
     return (
       <div className="flex items-center gap-2">
-        <Avatar name={x.author?.name ?? x.guestName ?? "Khách"} color={x.author?.color ?? "#9aa1ad"} size={isReply ? 22 : 26} />
-        <span className="min-w-0 truncate text-[13px] font-semibold">{x.author?.name ?? x.guestName ?? "Khách"}</span>
-        <span className="shrink-0 text-xs text-dim" title={new Date(x.createdAt).toLocaleString("vi-VN")}>
-          {timeAgo(x.createdAt)}
-          {x.edited && " · đã sửa"}
+        <Avatar name={x.author?.name ?? x.guestName ?? t("Khách")} color={x.author?.color ?? "#9aa1ad"} size={isReply ? 22 : 26} />
+        <span className="min-w-0 truncate text-[13px] font-semibold">{x.author?.name ?? x.guestName ?? t("Khách")}</span>
+        <span className="shrink-0 text-xs text-dim" title={new Date(x.createdAt).toLocaleString(locale)}>
+          {ago(x.createdAt)}
+          {x.edited && ` · ${t("đã sửa")}`}
         </span>
         <div className="flex-1" />
         {(mine || canManage) && (
@@ -254,7 +259,7 @@ function Item({
               <>
                 {!isReply && (
                   <MenuItem icon={<Link2 size={14} />} onClick={() => (onCopyLink(), close())}>
-                    Sao chép link
+                    {t("Sao chép link")}
                   </MenuItem>
                 )}
                 {mine && (
@@ -266,11 +271,11 @@ function Item({
                       close();
                     }}
                   >
-                    Sửa
+                    {t("Sửa")}
                   </MenuItem>
                 )}
                 <MenuItem danger icon={<Trash2 size={14} />} onClick={() => (onDelete(x.id, isReply), close())}>
-                  Xoá
+                  {t("Xoá")}
                 </MenuItem>
               </>
             )}
@@ -285,10 +290,10 @@ function Item({
         <MentionInput value={editText} onChange={setEditText} people={people} onSubmit={saveEdit} autoFocus />
         <div className="mt-1.5 flex justify-end gap-1.5">
           <button className="btn-ghost h-7 text-xs" onClick={() => setEditing(null)}>
-            Huỷ
+            {t("Huỷ")}
           </button>
           <button className="btn-primary h-7 text-xs" onClick={saveEdit}>
-            Lưu
+            {t("Lưu")}
           </button>
         </div>
       </div>
@@ -319,18 +324,18 @@ function Item({
           </span>
         )}
         {c.annotation && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-mut" title="Có hình vẽ">
+          <span className="inline-flex items-center gap-1 text-[11px] text-mut" title={t("Có hình vẽ")}>
             <PenLine size={12} />
           </span>
         )}
         {c.fromVersionNo != null && (
-          <span className="rounded bg-[#7c83fd]/15 px-1.5 py-0.5 text-[11px] font-medium text-[#a5aaff]" title="Comment chưa xong từ phiên bản trước">
-            Từ V{c.fromVersionNo}
+          <span className="rounded bg-[#7c83fd]/15 px-1.5 py-0.5 text-[11px] font-medium text-[#a5aaff]" title={t("Comment chưa xong từ phiên bản trước")}>
+            {t("Từ V{n}", { n: c.fromVersionNo })}
           </span>
         )}
         {c.internal && (
           <span className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[11px] font-medium text-warn">
-            <Lock size={10} /> Nội bộ
+            <Lock size={10} /> {t("Nội bộ")}
           </span>
         )}
       </div>
@@ -356,7 +361,7 @@ function Item({
               setReplying((v) => !v);
             }}
           >
-            <CornerDownRight size={13} /> Trả lời
+            <CornerDownRight size={13} /> {t("Trả lời")}
           </button>
         )}
         {canResolve && (
@@ -366,22 +371,22 @@ function Item({
               e.stopPropagation();
               void onUpdate(c.id, { resolved: !c.resolved });
             }}
-            title={c.resolved ? "Mở lại" : "Đánh dấu đã xử lý"}
+            title={c.resolved ? t("Mở lại") : t("Đánh dấu đã xử lý")}
           >
             {c.resolved ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-            {c.resolved ? "Đã xong" : "Xong"}
+            {c.resolved ? t("Đã xong") : t("Xong")}
           </button>
         )}
       </div>
       {replying && (
         <div className="mt-2 pl-[34px]" onClick={(e) => e.stopPropagation()}>
-          <MentionInput value={reply} onChange={setReply} people={people} onSubmit={sendReply} placeholder={people.length ? "Viết trả lời… (@ để nhắc tên)" : "Viết trả lời…"} autoFocus rows={1} />
+          <MentionInput value={reply} onChange={setReply} people={people} onSubmit={sendReply} placeholder={people.length ? t("Viết trả lời… (@ để nhắc tên)") : t("Viết trả lời…")} autoFocus rows={1} />
           <div className="mt-1.5 flex justify-end gap-1.5">
             <button className="btn-ghost h-7 text-xs" onClick={() => setReplying(false)}>
-              Huỷ
+              {t("Huỷ")}
             </button>
             <button className="btn-primary h-7 text-xs" disabled={!reply.trim() || sending} onClick={sendReply}>
-              Gửi
+              {t("Gửi")}
             </button>
           </div>
         </div>
@@ -451,6 +456,7 @@ export function CommentPanel({
   composer: ComposerCtx;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
+  const t = useT();
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [text, setText] = useState("");
@@ -482,9 +488,9 @@ export function CommentPanel({
   };
 
   const tabs: [Filter, string][] = [
-    ["all", `Tất cả ${comments.length}`],
-    ["open", `Chưa xong ${openCount}`],
-    ["done", `Đã xong ${comments.length - openCount}`],
+    ["all", t("Tất cả {n}", { n: comments.length })],
+    ["open", t("Chưa xong {n}", { n: openCount })],
+    ["done", t("Đã xong {n}", { n: comments.length - openCount })],
   ];
 
   return (
@@ -503,7 +509,7 @@ export function CommentPanel({
         </div>
         <label className="relative block">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-dim" />
-          <input className="input h-8 pl-8" placeholder="Tìm trong comment…" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+          <input className="input h-8 pl-8" placeholder={t("Tìm trong comment…")} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
         </label>
       </div>
 
@@ -511,7 +517,7 @@ export function CommentPanel({
         {shown.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-mut">
             <MessageSquare className="text-dim" />
-            {comments.length === 0 ? "Chưa có comment nào. Dừng video ở chỗ cần sửa rồi viết comment bên dưới." : "Không có comment khớp bộ lọc."}
+            {comments.length === 0 ? t("Chưa có comment nào. Dừng video ở chỗ cần sửa rồi viết comment bên dưới.") : t("Không có comment khớp bộ lọc.")}
           </div>
         ) : (
           shown.map((c) => (
@@ -546,7 +552,7 @@ export function CommentPanel({
               people={internal ? people.filter((p) => !p.client) : people}
               onSubmit={send}
               onFocus={composer.onFocus}
-              placeholder={internal ? "Comment nội bộ (khách không thấy)…" : people.length ? "Viết comment… (@ để nhắc tên)" : "Viết comment…"}
+              placeholder={internal ? t("Comment nội bộ (khách không thấy)…") : people.length ? t("Viết comment… (@ để nhắc tên)") : t("Viết comment…")}
             />
             <div
               className="mt-1 flex flex-wrap items-center gap-1"
@@ -556,7 +562,7 @@ export function CommentPanel({
               {composer.anchorLabel && (
                 <button
                   onClick={() => composer.setAttach(!composer.attach)}
-                  title={composer.attach ? "Bỏ gắn mốc" : "Gắn mốc"}
+                  title={composer.attach ? t("Bỏ gắn mốc") : t("Gắn mốc")}
                   className={cn(
                     "inline-flex h-7 items-center gap-1 rounded-md px-2 font-mono text-[11.5px] font-semibold",
                     composer.attach ? "bg-accent/15 text-accent" : "text-dim line-through hover:text-mut",
@@ -569,47 +575,47 @@ export function CommentPanel({
               {composer.canDraw && (
                 <button
                   onClick={() => composer.setDrawing(!composer.drawing)}
-                  title="Vẽ lên khung hình"
+                  title={t("Vẽ lên khung hình")}
                   className={cn("inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs", composer.drawing || composer.shapeCount ? "bg-accent/15 text-accent" : "text-mut hover:bg-panel-2 hover:text-fg")}
                 >
                   <PenLine size={13} />
-                  {composer.shapeCount ? composer.shapeCount : "Vẽ"}
+                  {composer.shapeCount ? composer.shapeCount : t("Vẽ")}
                 </button>
               )}
               {composer.canPin && (
                 <button
                   onClick={() => composer.setPlacingPin(!composer.placingPin)}
-                  title="Ghim vào vị trí trên hình"
+                  title={t("Ghim vào vị trí trên hình")}
                   className={cn("inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs", composer.placingPin || composer.pinSet ? "bg-accent/15 text-accent" : "text-mut hover:bg-panel-2 hover:text-fg")}
                 >
                   <MapPin size={13} />
-                  {composer.pinSet ? "Đã ghim" : "Ghim"}
+                  {composer.pinSet ? t("Đã ghim") : t("Ghim")}
                 </button>
               )}
               {canInternal && (
                 <button
                   onClick={() => setInternal(!internal)}
-                  title="Comment nội bộ: khách hàng không thấy"
+                  title={t("Comment nội bộ: khách hàng không thấy")}
                   className={cn("inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs", internal ? "bg-warn/15 text-warn" : "text-mut hover:bg-panel-2 hover:text-fg")}
                 >
-                  <Lock size={12} /> Nội bộ
+                  <Lock size={12} /> {t("Nội bộ")}
                 </button>
               )}
               {(composer.shapeCount > 0 || composer.pinSet) && (
                 <button className="h-7 rounded-md px-2 text-xs text-dim hover:text-fg" onClick={composer.clearDraft}>
-                  Bỏ vẽ/ghim
+                  {t("Bỏ vẽ/ghim")}
                 </button>
               )}
               <div className="flex-1" />
               <button className="btn-primary h-7 px-2.5 text-xs" disabled={!text.trim() || sending} onClick={send}>
-                <Send size={13} /> Gửi
+                <Send size={13} /> {t("Gửi")}
               </button>
             </div>
           </div>
-          <p className="mt-1.5 px-1 text-[11px] text-dim">Enter để gửi · Shift+Enter xuống dòng · C để viết nhanh</p>
+          <p className="mt-1.5 px-1 text-[11px] text-dim">{t("Enter để gửi · Shift+Enter xuống dòng · C để viết nhanh")}</p>
         </div>
       ) : (
-        <p className="border-t border-line p-3 text-center text-xs text-mut">Bạn chỉ có quyền xem file này.</p>
+        <p className="border-t border-line p-3 text-center text-xs text-mut">{t("Bạn chỉ có quyền xem file này.")}</p>
       )}
     </aside>
   );

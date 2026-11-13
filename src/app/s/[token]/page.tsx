@@ -7,6 +7,8 @@ import { ShareGate } from "@/components/ShareGate";
 import { AssetThumb } from "@/components/AssetThumb";
 import { StatusPill } from "@/components/StatusPill";
 import { Logo } from "@/components/ui";
+import { LangPicker } from "@/components/I18n";
+import { guestT } from "@/lib/i18n/server";
 
 export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -19,19 +21,21 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   );
   if (assets.length === 1) redirect(`/s/${token}/${assets[0].id}`);
   await touchShare(share.id);
+  const { t } = await guestT();
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-5">
         <Logo size={26} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{share.name}</div>
           <div className="truncate text-xs text-mut">{share.project.name}</div>
         </div>
+        <LangPicker />
       </header>
       <div className="flex-1 overflow-y-auto p-5">
         {assets.length === 0 ? (
-          <p className="mt-20 text-center text-sm text-mut">Không còn file nào trong link này.</p>
+          <p className="mt-20 text-center text-sm text-mut">{t("Không còn file nào trong link này.")}</p>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
             {assets.map((a) => (

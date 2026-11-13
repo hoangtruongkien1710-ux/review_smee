@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, createContext, useContext
 import { createPortal } from "react-dom";
 import { X, Eye, EyeOff } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
+import { useT } from "./I18n";
 
 /* ---------------- Logo ---------------- */
 export function Logo({ size = 28 }: { size?: number }) {
@@ -49,13 +50,14 @@ export function Modal({
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [open, onClose]);
+  const t = useT();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
       <div className="card w-full shadow-2xl" style={{ maxWidth: width }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
           <h2 className="text-[15px] font-semibold">{title}</h2>
-          <button className="btn-icon" onClick={onClose} aria-label="Đóng">
+          <button className="btn-icon" onClick={onClose} aria-label={t("Đóng")}>
             <X size={16} />
           </button>
         </div>
@@ -215,8 +217,9 @@ export async function api<T = unknown>(url: string, opts: { method?: string; bod
 
 /* ---------------- Confirm ---------------- */
 export function useConfirm() {
+  const t = useT();
   const [state, setState] = useState<{ title: string; text: string; ok: string; resolve: (v: boolean) => void } | null>(null);
-  const confirm = (title: string, text: string, ok = "Xoá") =>
+  const confirm = (title: string, text: string, ok = t("Xoá")) =>
     new Promise<boolean>((resolve) => setState({ title, text, ok, resolve }));
   const node = state ? (
     <Modal
@@ -236,7 +239,7 @@ export function useConfirm() {
             setState(null);
           }}
         >
-          Huỷ
+          {t("Huỷ")}
         </button>
         <button
           className="btn-danger"
@@ -259,6 +262,7 @@ export function PasswordInput({
   ...props
 }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> & { className?: string }) {
   const [show, setShow] = useState(false);
+  const t = useT();
   return (
     <div className={cn("relative", className)}>
       <input {...props} type={show ? "text" : "password"} className="input pr-10" />
@@ -267,8 +271,8 @@ export function PasswordInput({
         tabIndex={-1}
         onClick={() => setShow(!show)}
         className="absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-mut hover:text-fg"
-        title={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-        aria-label={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+        title={show ? t("Ẩn mật khẩu") : t("Hiện mật khẩu")}
+        aria-label={show ? t("Ẩn mật khẩu") : t("Hiện mật khẩu")}
       >
         {show ? <EyeOff size={16} /> : <Eye size={16} />}
       </button>

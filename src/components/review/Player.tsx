@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatTime, frameOf, type TcMode, TC_LABEL } from "@/lib/timecode";
 import { Menu, MenuItem } from "../ui";
+import { useT } from "../I18n";
 
 export type MediaState = {
   t: number;
@@ -357,22 +358,23 @@ export function Transport({
   onFullscreen?: () => void;
   extra?: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-1 text-sm">
-      <button className="btn-icon" onClick={() => tr.step(-1)} title="Lùi 1 khung hình (←)">
+      <button className="btn-icon" onClick={() => tr.step(-1)} title={t("Lùi 1 khung hình (←)")}>
         <StepBack size={16} />
       </button>
-      <button className="btn-icon size-9 text-fg" onClick={tr.toggle} title="Phát / dừng (Space, K)">
+      <button className="btn-icon size-9 text-fg" onClick={tr.toggle} title={t("Phát / dừng (Space, K)")}>
         {s.playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
       </button>
-      <button className="btn-icon" onClick={() => tr.step(1)} title="Tới 1 khung hình (→)">
+      <button className="btn-icon" onClick={() => tr.step(1)} title={t("Tới 1 khung hình (→)")}>
         <StepForward size={16} />
       </button>
       <Menu
         align="left"
         up
         trigger={() => (
-          <span className="ml-1 cursor-pointer rounded-md px-2 py-1 font-mono text-[13px] tabular-nums text-fg hover:bg-panel-2" title="Đổi cách hiển thị thời gian">
+          <span className="ml-1 cursor-pointer rounded-md px-2 py-1 font-mono text-[13px] tabular-nums text-fg hover:bg-panel-2" title={t("Đổi cách hiển thị thời gian")}>
             {formatTime(s.t, fps, mode)}
             <span className="text-dim"> / {formatTime(s.duration, fps, mode)}</span>
           </span>
@@ -387,7 +389,7 @@ export function Transport({
                 close();
               }}
             >
-              <span className={cn(m === mode && "text-accent")}>{TC_LABEL[m]}</span>
+              <span className={cn(m === mode && "text-accent")}>{t(TC_LABEL[m])}</span>
             </MenuItem>
           ))
         }
@@ -401,30 +403,30 @@ export function Transport({
         <button
           className={cn("btn-icon w-auto px-2 text-xs font-semibold", inPt != null && "text-warn")}
           onClick={setIn}
-          title="Đặt điểm vào (I)"
+          title={t("Đặt điểm vào (I)")}
         >
           {inPt != null ? `In ${formatTime(inPt, fps, mode)}` : "In"}
         </button>
         <button
           className={cn("btn-icon w-auto px-2 text-xs font-semibold", outPt != null && "text-warn")}
           onClick={setOut}
-          title="Đặt điểm ra (O)"
+          title={t("Đặt điểm ra (O)")}
         >
           {outPt != null ? `Out ${formatTime(outPt, fps, mode)}` : "Out"}
         </button>
         {(inPt != null || outPt != null) && (
-          <button className="btn-icon size-7" onClick={clearInOut} title="Bỏ In/Out (X)">
+          <button className="btn-icon size-7" onClick={clearInOut} title={t("Bỏ In/Out (X)")}>
             <X size={14} />
           </button>
         )}
       </div>
-      <button className={cn("btn-icon", loop && "bg-accent/15 text-accent")} onClick={() => setLoop(!loop)} title="Lặp lại (đoạn In/Out nếu có)">
+      <button className={cn("btn-icon", loop && "bg-accent/15 text-accent")} onClick={() => setLoop(!loop)} title={t("Lặp lại (đoạn In/Out nếu có)")}>
         <Repeat size={16} />
       </button>
       <Menu
         up
         trigger={() => (
-          <span className="btn-icon w-auto cursor-pointer px-2 text-xs font-semibold tabular-nums" title="Tốc độ phát">
+          <span className="btn-icon w-auto cursor-pointer px-2 text-xs font-semibold tabular-nums" title={t("Tốc độ phát")}>
             {s.rate}x
           </span>
         )}
@@ -444,7 +446,7 @@ export function Transport({
         }
       </Menu>
       <div className="group flex items-center">
-        <button className="btn-icon" onClick={() => el && (el.muted = !el.muted)} title="Tắt / bật tiếng (M)">
+        <button className="btn-icon" onClick={() => el && (el.muted = !el.muted)} title={t("Tắt / bật tiếng (M)")}>
           {s.muted || s.volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </button>
         <input
@@ -459,11 +461,11 @@ export function Transport({
             el.muted = el.volume === 0;
           }}
           className="w-0 accent-accent opacity-0 transition-all group-hover:w-20 group-hover:opacity-100"
-          aria-label="Âm lượng"
+          aria-label={t("Âm lượng")}
         />
       </div>
       {onFullscreen && (
-        <button className="btn-icon" onClick={onFullscreen} title="Toàn màn hình (F)">
+        <button className="btn-icon" onClick={onFullscreen} title={t("Toàn màn hình (F)")}>
           {fullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
         </button>
       )}

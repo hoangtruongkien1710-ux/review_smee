@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, XCircle, ChevronDown, ThumbsUp } from "lucide-react";
 import type { ApprovalDTO } from "@/lib/approval-dto";
-import { cn, timeAgo } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useI18n } from "../I18n";
 import { Menu, api, useToast } from "../ui";
 
 export function ApprovalButton({
@@ -19,6 +20,7 @@ export function ApprovalButton({
   onDone?: () => void;
 }) {
   const toast = useToast();
+  const { t, ago } = useI18n();
   const [list, setList] = useState<ApprovalDTO[] | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,11 +47,11 @@ export function ApprovalButton({
       await api(url, { body: { decision, note: note.trim() || undefined, guestName: name } });
       setNote("");
       close();
-      toast(decision === "APPROVED" ? `Đã duyệt V${versionNo}` : `Đã gửi yêu cầu sửa V${versionNo}`);
+      toast(decision === "APPROVED" ? t("Đã duyệt V{n}", { n: versionNo }) : t("Đã gửi yêu cầu sửa V{n}", { n: versionNo }));
       await load();
       onDone?.();
     } catch (e) {
-      toast((e as Error).message, "err");
+      toast(t((e as Error).message), "err");
     } finally {
       setBusy(false);
     }
@@ -67,7 +69,7 @@ export function ApprovalButton({
                 ? "border-err/40 bg-err/10 text-err"
                 : "border-line-2 text-fg hover:bg-panel-2",
           )}
-          title="Duyệt phiên bản"
+          title={t("Duyệt phiên bản")}
         >
           {latest?.decision === "APPROVED" ? (
             <CheckCircle2 size={15} />
@@ -77,7 +79,7 @@ export function ApprovalButton({
             <ThumbsUp size={15} />
           )}
           <span className="max-w-40 truncate">
-            {latest?.decision === "APPROVED" ? "Đã duyệt" : latest?.decision === "CHANGES" ? "Cần sửa" : "Duyệt"}
+            {latest?.decision === "APPROVED" ? t("Đã duyệt") : latest?.decision === "CHANGES" ? t("Cần sửa") : t("Duyệt")}
           </span>
           <ChevronDown size={14} className="opacity-60" />
         </span>
@@ -85,10 +87,10 @@ export function ApprovalButton({
     >
       {(close) => (
         <div className="w-80 p-2">
-          <p className="mb-2 text-sm font-medium">Duyệt phiên bản V{versionNo}</p>
+          <p className="mb-2 text-sm font-medium">{t("Duyệt phiên bản V{n}", { n: versionNo })}</p>
           <textarea
             className="input mb-2 min-h-16 resize-none py-2 text-sm"
-            placeholder="Ghi chú (không bắt buộc)"
+            placeholder={t("Ghi chú (không bắt buộc)")}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={(e) => e.stopPropagation()}
@@ -96,17 +98,17 @@ export function ApprovalButton({
           />
           <div className="mb-3 grid grid-cols-2 gap-2">
             <button className="btn h-9 bg-ok text-white hover:bg-ok/90" disabled={busy} onClick={() => decide("APPROVED", close)}>
-              <CheckCircle2 size={15} /> Duyệt
+              <CheckCircle2 size={15} /> {t("Duyệt")}
             </button>
             <button className="btn h-9 bg-err text-white hover:bg-err/90" disabled={busy} onClick={() => decide("CHANGES", close)}>
-              <XCircle size={15} /> Cần sửa
+              <XCircle size={15} /> {t("Cần sửa")}
             </button>
           </div>
-          <p className="mb-1 text-xs font-medium text-dim">Lịch sử</p>
+          <p className="mb-1 text-xs font-medium text-dim">{t("Lịch sử")}</p>
           {!list ? (
-            <p className="py-2 text-xs text-mut">Đang tải…</p>
+            <p className="py-2 text-xs text-mut">{t("Đang tải…")}</p>
           ) : list.length === 0 ? (
-            <p className="py-2 text-xs text-mut">Chưa ai duyệt phiên bản này.</p>
+            <p className="py-2 text-xs text-mut">{t("Chưa ai duyệt phiên bản này.")}</p>
           ) : (
             <ul className="max-h-56 space-y-2 overflow-y-auto">
               {list.map((a) => (
@@ -119,9 +121,9 @@ export function ApprovalButton({
                   <div className="min-w-0">
                     <div>
                       <b>{a.name}</b>
-                      {a.guest && <span className="text-xs text-dim"> (khách)</span>}{" "}
-                      <span className="text-mut">{a.decision === "APPROVED" ? "đã duyệt" : "yêu cầu sửa"}</span>
-                      <span className="text-xs text-dim"> · {timeAgo(a.createdAt)}</span>
+                      {a.guest && <span className="text-xs text-dim"> ({t("khách")})</span>}{" "}
+                      <span className="text-mut">{a.decision === "APPROVED" ? t("đã duyệt") : t("yêu cầu sửa")}</span>
+                      <span className="text-xs text-dim"> · {ago(a.createdAt)}</span>
                     </div>
                     {a.note && <p className="whitespace-pre-wrap break-words text-xs text-mut">{a.note}</p>}
                   </div>

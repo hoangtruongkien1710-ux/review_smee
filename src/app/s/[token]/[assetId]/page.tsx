@@ -41,7 +41,7 @@ export default async function ShareAssetPage({
       asset={{ ...asset, commentCount: 0, assigneeName: null, assigneeId: null }}
       versions={[versionDTO(current)]}
       siblingIds={siblingIds}
-      me={{ id: "guest", name: "Khách", color: "#9aa1ad", role: "CLIENT" }}
+      me={{ id: "guest", name: "Guest", color: "#9aa1ad", role: "CLIENT" }}
       canEdit={false}
       canComment={share.allowComment}
       canManage={false}
