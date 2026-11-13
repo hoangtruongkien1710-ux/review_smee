@@ -148,7 +148,7 @@ export function UsersAdmin({ me, users }: { me: { id: string; role: Role }; user
           </table>
         </div>
         <p className="mt-3 text-xs text-dim">
-          Thành viên thấy các project được thêm vào. Khách hàng chỉ thấy project được mời và không thấy comment nội bộ.
+          Thành viên (nhân viên) thấy tất cả project, được upload và comment. Khách hàng chỉ thấy project được mời và không thấy comment nội bộ.
         </p>
       </div>
 

@@ -74,7 +74,7 @@ export async function projectPeople(projectId: string): Promise<Person[]> {
   const users = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      OR: [{ role: { in: ["OWNER", "ADMIN"] } }, { memberships: { some: { projectId } } }],
+      OR: [{ role: { in: ["OWNER", "ADMIN", "MEMBER"] } }, { memberships: { some: { projectId } } }],
     },
     select: { id: true, name: true, color: true, email: true, role: true },
     orderBy: { name: "asc" },
@@ -95,7 +95,7 @@ export async function notify(
     where: { id: { in: ids }, status: "ACTIVE" },
     select: { id: true, role: true, memberships: { where: { projectId }, select: { role: true } } },
   });
-  const ok = users.filter((u) => (isAdmin(u) || u.memberships.length > 0) && !(n.internal && u.role === "CLIENT"));
+  const ok = users.filter((u) => (isAdmin(u) || u.role === "MEMBER" || u.memberships.length > 0) && !(n.internal && u.role === "CLIENT"));
   if (!ok.length) return;
   await prisma.notification.createMany({
     data: ok.map((u) => ({

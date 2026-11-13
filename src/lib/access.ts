@@ -5,13 +5,17 @@ import type { ProjectRole, Prisma } from "@/generated/prisma/client";
 
 const RANK: Record<ProjectRole, number> = { VIEWER: 1, COMMENTER: 2, EDITOR: 3, MANAGER: 4 };
 
+/** Nhân viên (MEMBER) thấy mọi project, mặc định được upload + comment. Khách hàng (CLIENT) chỉ thấy project được thêm vào. */
+export const STAFF_DEFAULT_ROLE: ProjectRole = "EDITOR";
+const isStaff = (u: { role: string }) => u.role === "MEMBER";
+
 /** Quyền của user trong project (admin/owner = MANAGER ở mọi project). null = không có quyền. */
 export async function projectRole(user: SessionUser, projectId: string): Promise<ProjectRole | null> {
   if (isAdmin(user)) return "MANAGER";
   const m = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId, userId: user.id } },
   });
-  return m?.role ?? null;
+  return m?.role ?? (isStaff(user) ? STAFF_DEFAULT_ROLE : null);
 }
 
 export async function requireProject(user: SessionUser, projectId: string, min: ProjectRole = "VIEWER") {
@@ -29,6 +33,6 @@ export function can(role: ProjectRole | null, min: ProjectRole) {
 
 /** Điều kiện lọc các project user được xem. */
 export function visibleProjectsWhere(user: SessionUser): Prisma.ProjectWhereInput {
-  if (isAdmin(user)) return {};
+  if (isAdmin(user) || isStaff(user)) return {};
   return { members: { some: { userId: user.id } } };
 }
