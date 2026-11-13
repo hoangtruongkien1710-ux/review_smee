@@ -9,6 +9,7 @@ import { extOf } from "../lib/kinds.ts";
 import * as drive from "../lib/drive.ts";
 import { assetParent, driveFileName } from "../lib/drive-sync.ts";
 import * as m from "./media.ts";
+import { SHEET_EXTS, readSheets } from "./sheet.ts";
 import { runTelegramBot } from "./telegram-bot.ts";
 import { runTelegramDigest } from "./telegram-digest.ts";
 import { cleanupConfig, freeBytes, runPreviewCleanup } from "./preview-cleanup.ts";
@@ -147,6 +148,18 @@ async function processVersion(id: string) {
             .catch((e) => log(`không tạo được ảnh trang: ${(e as Error).message}`));
         }
         if (fs.existsSync(path.join(out, "thumb.jpg"))) data.thumbKey = rel(path.join(out, "thumb.jpg"));
+        if (SHEET_EXTS.includes(ext)) {
+          // bảng tính: thêm dữ liệu dạng bảng để xem như Excel (không lỗi cả file nếu đọc hỏng)
+          try {
+            const sheet = await readSheets(input, ext, work);
+            const p = path.join(out, "sheet.json");
+            fs.writeFileSync(p, JSON.stringify(sheet));
+            data.sheetKey = rel(p);
+          } catch (e) {
+            data.sheetKey = "";
+            log(`không đọc được bảng tính: ${(e as Error).message}`);
+          }
+        }
         break;
       }
       default:
@@ -203,12 +216,19 @@ async function loop(slot: number) {
       const msg = (e as Error).message;
       log(`[${slot}] lỗi ${id ?? ""}: ${msg}`);
       if (id) {
-        // tạo lại bản xem bị lỗi: giữ trạng thái "đã dọn" để có thể thử lại, không đánh dấu file hỏng
-        const purged = await prisma.version.findUnique({ where: { id }, select: { previewPurgedAt: true } }).catch(() => null);
+        // file đã từng xem được (tạo lại bản xem / xử lý lại bảng tính) mà lỗi: giữ nguyên trạng thái xem được
+        const prev = await prisma.version
+          .findUnique({ where: { id }, select: { previewPurgedAt: true, proxyKey: true, sheetKey: true } })
+          .catch(() => null);
+        const keep = !!(prev?.previewPurgedAt || prev?.proxyKey);
         await prisma.version
           .update({
             where: { id },
-            data: { processingStatus: purged?.previewPurgedAt ? "READY" : "FAILED", processingError: msg.slice(0, 1000) },
+            data: {
+              processingStatus: keep ? "READY" : "FAILED",
+              processingError: msg.slice(0, 1000),
+              ...(keep && prev?.sheetKey == null ? { sheetKey: "" } : {}),
+            },
           })
           .catch(() => {});
       }
@@ -217,9 +237,23 @@ async function loop(slot: number) {
   }
 }
 
+/** Bảng tính upload trước khi có trình xem dạng bảng → xử lý lại (mỗi lượt vài file). */
+async function backfillSheets() {
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "Version"
+    WHERE kind = 'DOCUMENT' AND "processingStatus" = 'READY' AND "sheetKey" IS NULL
+      AND ("originalKey" IS NOT NULL OR "driveFileId" IS NOT NULL)
+      AND lower(substring("originalName" from '\.([^.]+)$')) = ANY(${SHEET_EXTS})
+    LIMIT 3`;
+  for (const r of rows)
+    await prisma.version.updateMany({ where: { id: r.id, processingStatus: "READY" }, data: { processingStatus: "QUEUED", progress: 0 } });
+  if (rows.length) log(`xử lý lại ${rows.length} bảng tính để xem dạng bảng`);
+}
+
 /** Định kỳ: thử đẩy lại các file chưa lên Drive, dọn phiên upload bỏ dở quá 3 ngày. */
 async function housekeeping() {
   try {
+    await backfillSheets();
     if (drive.driveEnabled()) {
       const pending = await prisma.version.findMany({
         where: { processingStatus: "READY", driveFileId: null, originalKey: { not: null } },

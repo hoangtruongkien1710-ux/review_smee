@@ -20,6 +20,7 @@ type V = {
   thumbKey: string | null;
   spriteKey: string | null;
   waveformKey: string | null;
+  sheetKey?: string | null;
 };
 
 const MIME: Record<string, string> = {
@@ -98,7 +99,7 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
     return sendFile(req, path.join(abs(v.pagesKey), `${n}.jpg`), "image/jpeg");
   }
 
-  const key = { proxy: v.proxyKey, thumb: v.thumbKey, sprite: v.spriteKey, waveform: v.waveformKey }[type];
+  const key = { proxy: v.proxyKey, thumb: v.thumbKey, sprite: v.spriteKey, waveform: v.waveformKey, sheet: v.sheetKey ?? null }[type];
   if (key === undefined) throw new HttpError(400, "Loại file không hợp lệ");
   if (!key) throw new HttpError(404, "Chưa có bản xem");
   if (type === "proxy" && (!v.lastViewedAt || Date.now() - v.lastViewedAt.getTime() > 3600_000))

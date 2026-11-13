@@ -43,6 +43,7 @@ import { KindIcon, formatDuration } from "../AssetThumb";
 import { FitBox, Overlay, DRAW_COLORS, type Tool, type Pin } from "./Stage";
 import { useMedia, useTransport, Timeline, Transport, type Marker } from "./Player";
 import { CommentPanel, type Anchor } from "./Comments";
+import { SheetView } from "./SheetView";
 
 type Me = { id: string; name: string; color: string; role: string };
 export type GuestCtx = { token: string; shareName: string; allowDownload: boolean; allowComment: boolean; allowApprove: boolean };
@@ -237,9 +238,13 @@ export function ReviewView({
 
   /* ---------- loại trình xem ---------- */
   const ready = v?.status === "READY";
-  const view: "video" | "audio" | "image" | "pages" | "frame" | "none" = !ready || !v?.hasProxy
+  const view: "video" | "audio" | "image" | "pages" | "sheet" | "frame" | "none" = !ready
     ? "none"
-    : v.kind === "VIDEO"
+    : v?.hasSheet
+      ? "sheet"
+      : !v?.hasProxy
+        ? "none"
+        : v.kind === "VIDEO"
       ? "video"
       : v.kind === "AUDIO"
         ? "audio"
@@ -300,7 +305,9 @@ export function ReviewView({
 
   /* ---------- trang PDF ---------- */
   const pageCount = Math.min(v?.pageCount ?? 1, 300);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(1); // trang PDF, hoặc sheet (bảng tính), đếm từ 1
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const sheetName = (n: number) => sheetNames[n - 1] ?? `Sheet ${n}`;
   const [pageAspect, setPageAspect] = useState<Record<number, number>>({});
   const [imgAspect, setImgAspect] = useState<number | null>(null);
 
@@ -331,7 +338,7 @@ export function ReviewView({
   // thứ tự hiển thị + số thứ tự comment
   const sorted = useMemo(() => {
     const key = (c: CommentDTO) =>
-      timed ? (c.timeStart ?? Number.MAX_VALUE) : view === "pages" ? (c.page ?? Number.MAX_VALUE) : 0;
+      timed ? (c.timeStart ?? Number.MAX_VALUE) : view === "pages" || view === "sheet" ? (c.page ?? Number.MAX_VALUE) : 0;
     return [...comments].sort((a, b) => key(a) - key(b) || a.createdAt.localeCompare(b.createdAt));
   }, [comments, timed, view]);
   const numbers = useMemo(() => new Map(sorted.map((c, i) => [c.id, i + 1])), [sorted]);
@@ -402,7 +409,9 @@ export function ReviewView({
       : shortTime(inPt ?? s.t, fps, s.duration, tcMode)
     : view === "pages"
       ? t("Trang {n}", { n: page })
-      : null;
+      : view === "sheet"
+        ? sheetName(page)
+        : null;
 
   const anchorOf = (c: CommentDTO): Anchor => {
     if (c.timeStart != null)
@@ -412,7 +421,7 @@ export function ReviewView({
           shortTime(c.timeStart, fps, s.duration, tcMode) +
           (c.timeEnd != null ? ` → ${shortTime(c.timeEnd, fps, s.duration, tcMode)}` : ""),
       };
-    if (c.page != null) return { icon: "page", label: t("Trang {n}", { n: c.page }) };
+    if (c.page != null) return { icon: "page", label: view === "sheet" ? sheetName(c.page) : t("Trang {n}", { n: c.page }) };
     if (c.pinX != null) return { icon: "pin", label: t("Ghim") };
     return null;
   };
@@ -424,7 +433,7 @@ export function ReviewView({
       payload.timeStart = inPt ?? s.t;
       if (inPt != null && outPt != null) payload.timeEnd = outPt;
     }
-    if (view === "pages" && attach) payload.page = page;
+    if ((view === "pages" || view === "sheet") && attach) payload.page = page;
     if (pin) Object.assign(payload, { pinX: pin.x, pinY: pin.y });
     if (shapes.length) payload.annotation = { shapes };
     if (guest) {
@@ -782,6 +791,8 @@ export function ReviewView({
           )}
         </FitBox>
       );
+    if (view === "sheet")
+      return <SheetView key={v.id} url={`${fileBase}/${v.id}/sheet`} sheet={page} onSheet={setPage} onLoaded={setSheetNames} />;
     if (view === "pages")
       return (
         <FitBox aspect={pageAspect[page] ?? 1 / 1.414} className="p-4">
@@ -1052,7 +1063,7 @@ export function ReviewView({
               {t("Bấm vào vị trí cần ghim comment · Esc để huỷ")}
             </div>
           )}
-          <div className="relative flex min-h-0 flex-1">{stage()}</div>
+          <div className="relative flex min-h-0 min-w-0 flex-1">{stage()}</div>
 
           {timed && ready && (
             <div className="shrink-0 border-t border-line bg-panel px-3 pb-2 pt-1">
@@ -1108,7 +1119,7 @@ export function ReviewView({
               <button className="btn-icon" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t("Trang trước")}>
                 <ChevronLeft size={16} />
               </button>
-              <span className="text-mut">Trang</span>
+              <span className="text-mut">{t("Trang")}</span>
               <input
                 className="input h-8 w-14 text-center tabular-nums"
                 value={page}
@@ -1119,7 +1130,7 @@ export function ReviewView({
                 onKeyDown={(e) => e.stopPropagation()}
               />
               <span className="text-mut">/ {pageCount}</span>
-              <button className="btn-icon" disabled={page >= pageCount} onClick={() => setPage(page + 1)} aria-label="Trang sau">
+              <button className="btn-icon" disabled={page >= pageCount} onClick={() => setPage(page + 1)} aria-label={t("Trang sau")}>
                 <ChevronRight size={16} />
               </button>
               {v?.pageCount && v.pageCount > pageCount && (

@@ -187,6 +187,7 @@ model Version {
   spriteCount      Int?
   waveformKey      String?
   pagesKey         String?
+  sheetKey         String? // bảng tính: dữ liệu bảng (JSON) để xem dạng Excel; "" = không đọc được
   previewPurgedAt  DateTime? // bản xem đã bị dọn để tiết kiệm ổ đĩa (tạo lại từ file gốc trên Drive khi cần)
   lastViewedAt     DateTime? // lần cuối có người mở bản xem
   processingStatus ProcessingStatus @default(UPLOADING)

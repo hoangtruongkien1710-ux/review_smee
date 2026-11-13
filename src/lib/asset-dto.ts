@@ -22,6 +22,7 @@ export type VersionDTO = {
   spriteCount: number | null;
   hasWaveform: boolean;
   hasPages: boolean;
+  hasSheet: boolean;
   onDrive: boolean;
   uploadedBy: string | null;
   createdAt: string;

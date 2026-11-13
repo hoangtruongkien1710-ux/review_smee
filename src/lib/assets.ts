@@ -36,6 +36,7 @@ export function versionDTO(v: VRow): VersionDTO {
     spriteCount: v.spriteKey ? v.spriteCount : null,
     hasWaveform: !!v.waveformKey,
     hasPages: !!v.pagesKey,
+    hasSheet: !!v.sheetKey,
     onDrive: !!v.driveFileId,
     uploadedBy: v.uploadedBy?.name ?? null,
     createdAt: v.createdAt.toISOString(),
