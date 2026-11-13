@@ -1,12 +1,11 @@
 import "server-only";
-import { cookies, headers } from "next/headers";
-import { LANG_COOKIE, isLang, makeT, pickLang, type Lang } from "./index";
+import { cookies } from "next/headers";
+import { LANG_COOKIE, isLang, makeT, type Lang } from "./index";
 
-/** Ngôn ngữ của khách: cookie đã chọn, nếu chưa thì theo trình duyệt. */
+/** Ngôn ngữ của khách: mặc định tiếng Việt, khách tự chọn ngôn ngữ khác (nhớ bằng cookie). */
 export async function guestLang(): Promise<Lang> {
   const c = (await cookies()).get(LANG_COOKIE)?.value;
-  if (isLang(c)) return c;
-  return pickLang((await headers()).get("accept-language"));
+  return isLang(c) ? c : "vi";
 }
 
 export async function guestT() {
