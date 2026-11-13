@@ -15,6 +15,8 @@ export type VersionDTO = {
   progress: number;
   error: string | null;
   hasProxy: boolean;
+  /** bản xem đã bị dọn để tiết kiệm ổ đĩa, mở lại sẽ tự tạo lại */
+  purged: boolean;
   hasThumb: boolean;
   spriteCols: number | null;
   spriteCount: number | null;

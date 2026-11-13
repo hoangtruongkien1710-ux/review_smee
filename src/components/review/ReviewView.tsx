@@ -26,6 +26,7 @@ import {
   Star,
   FileDown,
   Share2,
+  RefreshCw,
 } from "lucide-react";
 import type { AssetDTO, VersionDTO } from "@/lib/asset-dto";
 import type { CommentDTO, Person, Shape } from "@/lib/comment-dto";
@@ -212,6 +213,24 @@ export function ReviewView({
     const t = setInterval(() => router.refresh(), 3000);
     return () => clearInterval(t);
   }, [busy, router]);
+
+  // Bản xem đã bị dọn để tiết kiệm ổ đĩa → tự xếp hàng tạo lại khi có người mở
+  const restoreAsked = useRef(new Set<string>());
+  const restorePreview = useCallback(
+    async (id: string) => {
+      restoreAsked.current.add(id);
+      try {
+        await api(guest ? `/api/share/${guest.token}/versions/${id}/preview` : `/api/versions/${id}/preview`, { method: "POST" });
+        router.refresh();
+      } catch (e) {
+        toast((e as Error).message, "err");
+      }
+    },
+    [guest, router, toast],
+  );
+  useEffect(() => {
+    if (v?.purged && v.status === "READY" && !v.error && !restoreAsked.current.has(v.id)) void restorePreview(v.id);
+  }, [v?.id, v?.purged, v?.status, v?.error, restorePreview]);
 
   /* ---------- loại trình xem ---------- */
   const ready = v?.status === "READY";
@@ -654,7 +673,27 @@ export function ReviewView({
       return (
         <div className="m-auto text-center text-sm text-mut">
           <Loader2 className="mx-auto mb-2 animate-spin text-accent" />
-          {v.status === "PROCESSING" ? `Đang xử lý ${v.progress}%…` : "Đang chờ xử lý…"}
+          {v.purged ? (
+            <>
+              Đang tạo lại bản xem từ file gốc trên Google Drive{v.status === "PROCESSING" ? ` ${v.progress}%` : ""}…
+              <span className="mt-1 block text-xs">File này lâu không ai mở nên bản xem đã được dọn để tiết kiệm ổ đĩa.</span>
+            </>
+          ) : v.status === "PROCESSING" ? (
+            `Đang xử lý ${v.progress}%…`
+          ) : (
+            "Đang chờ xử lý…"
+          )}
+        </div>
+      );
+    if (v.purged)
+      return (
+        <div className="m-auto flex max-w-sm flex-col items-center gap-3 text-center text-sm text-mut">
+          <KindIcon asset={asset} size={48} />
+          <p>File này lâu không ai mở nên bản xem đã được dọn để tiết kiệm ổ đĩa.</p>
+          {v.error && <p className="text-xs text-err">Lần tạo lại trước bị lỗi: {v.error}</p>}
+          <button className="btn-primary" onClick={() => restorePreview(v.id)}>
+            <RefreshCw size={15} /> Tạo lại bản xem
+          </button>
         </div>
       );
     if (view === "none")

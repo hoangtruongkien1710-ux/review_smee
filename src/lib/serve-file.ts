@@ -6,8 +6,11 @@ import { Readable } from "node:stream";
 import { HttpError } from "./auth";
 import { abs } from "./storage";
 import * as drive from "./drive";
+import { prisma } from "./db";
 
 type V = {
+  id: string;
+  lastViewedAt?: Date | null;
   originalName: string;
   mimeType: string;
   originalKey: string | null;
@@ -98,6 +101,9 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
   const key = { proxy: v.proxyKey, thumb: v.thumbKey, sprite: v.spriteKey, waveform: v.waveformKey }[type];
   if (key === undefined) throw new HttpError(400, "Loại file không hợp lệ");
   if (!key) throw new HttpError(404, "Chưa có bản xem");
+  if (type === "proxy" && (!v.lastViewedAt || Date.now() - v.lastViewedAt.getTime() > 3600_000))
+    // ghi nhận lần mở để tác vụ dọn ổ đĩa giữ lại file đang được xem
+    void prisma.version.update({ where: { id: v.id }, data: { lastViewedAt: new Date() } }).catch(() => {});
   const ext = key.split(".").pop() ?? "";
   return sendFile(req, abs(key), MIME[ext] ?? "application/octet-stream");
 }

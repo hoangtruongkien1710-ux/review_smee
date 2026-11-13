@@ -66,6 +66,10 @@ services:
       <<: *app-env
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       MAX_PDF_PAGES: ${MAX_PDF_PAGES:-300}
+      PREVIEW_CLEANUP: ${PREVIEW_CLEANUP:-on}
+      PREVIEW_KEEP_OLD_VERSION_DAYS: ${PREVIEW_KEEP_OLD_VERSION_DAYS:-14}
+      PREVIEW_KEEP_DAYS: ${PREVIEW_KEEP_DAYS:-60}
+      STORAGE_MIN_FREE_GB: ${STORAGE_MIN_FREE_GB:-10}
     volumes:
       - storage:/data/storage
       - ./secrets:/secrets:ro

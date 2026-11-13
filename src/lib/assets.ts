@@ -30,6 +30,7 @@ export function versionDTO(v: VRow): VersionDTO {
     progress: v.progress,
     error: v.processingError,
     hasProxy: !!v.proxyKey,
+    purged: !!v.previewPurgedAt && !v.proxyKey,
     hasThumb: !!v.thumbKey,
     spriteCols: v.spriteKey ? v.spriteCols : null,
     spriteCount: v.spriteKey ? v.spriteCount : null,

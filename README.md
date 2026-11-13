@@ -42,6 +42,10 @@ Xem [docs/telegram.md](docs/telegram.md).
 
 Xem [docs/chia-se-duyet-xuat.md](docs/chia-se-duyet-xuat.md).
 
+### Tự dọn bản xem trên ổ VPS
+
+Xem [docs/don-o-dia.md](docs/don-o-dia.md).
+
 ### Tên miền + HTTPS
 
 Xem [docs/ten-mien.md](docs/ten-mien.md).

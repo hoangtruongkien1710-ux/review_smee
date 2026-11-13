@@ -4,13 +4,14 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "../lib/prisma-core.ts";
-import { abs, dirs, ensureDirs, mediaDir, rel, removeQuiet } from "../lib/storage.ts";
+import { abs, dirs, ensureDirs, mediaDir, rel, removeQuiet, safeName } from "../lib/storage.ts";
 import { extOf } from "../lib/kinds.ts";
 import * as drive from "../lib/drive.ts";
 import { assetParent, driveFileName } from "../lib/drive-sync.ts";
 import * as m from "./media.ts";
 import { runTelegramBot } from "./telegram-bot.ts";
 import { runTelegramDigest } from "./telegram-digest.ts";
+import { cleanupConfig, freeBytes, runPreviewCleanup } from "./preview-cleanup.ts";
 
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY || 2));
 const MAX_PDF_PAGES = Number(process.env.MAX_PDF_PAGES || 300);
@@ -34,11 +35,39 @@ async function setProgress(id: string, pct: number, force = false) {
   await prisma.version.update({ where: { id }, data: { progress: Math.round(pct) } }).catch(() => {});
 }
 
+/** Tải file gốc từ Google Drive về VPS (để tạo lại bản xem đã bị dọn). */
+async function fetchOriginal(v: { id: string; driveFileId: string; originalName: string; size: bigint }) {
+  if (!drive.driveEnabled()) throw new Error("Chưa kết nối Google Drive để lấy lại file gốc");
+  const need = Number(v.size) + cleanupConfig().minFreeGb * 0.5 * 1024 ** 3;
+  if (freeBytes() < need) throw new Error("Ổ đĩa VPS không đủ chỗ để tạo lại bản xem, hãy dọn bớt ổ đĩa");
+  const dir = path.join(dirs.originals, v.id);
+  fs.mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, safeName(v.originalName));
+  const r = await drive.download(v.driveFileId);
+  if (!r.ok || !r.body) throw new Error(`Không tải được file gốc từ Google Drive (${r.status})`);
+  const tmp = dest + ".part";
+  const { pipeline } = await import("node:stream/promises");
+  const { Readable } = await import("node:stream");
+  try {
+    await pipeline(Readable.fromWeb(r.body as import("node:stream/web").ReadableStream), fs.createWriteStream(tmp));
+    fs.renameSync(tmp, dest);
+  } catch (e) {
+    removeQuiet(dir);
+    throw e;
+  }
+  log(`đã tải lại file gốc từ Drive: ${v.originalName}`);
+  return dest;
+}
+
 async function processVersion(id: string) {
   const v = await prisma.version.findUniqueOrThrow({ where: { id }, include: { asset: true } });
-  if (!v.originalKey) throw new Error("Không còn file gốc trên máy chủ");
-  const input = abs(v.originalKey);
-  if (!fs.existsSync(input)) throw new Error("Không tìm thấy file gốc trên máy chủ");
+  let input = v.originalKey ? abs(v.originalKey) : null;
+  let fromDrive = false;
+  if (!input || !fs.existsSync(input)) {
+    if (!v.driveFileId) throw new Error(v.originalKey ? "Không tìm thấy file gốc trên máy chủ" : "Không còn file gốc trên máy chủ");
+    input = await fetchOriginal({ ...v, driveFileId: v.driveFileId });
+    fromDrive = true;
+  }
   const out = mediaDir(id);
   fs.mkdirSync(out, { recursive: true });
   const work = path.join(dirs.tmp, id);
@@ -124,12 +153,20 @@ async function processVersion(id: string) {
         // File khác: không có trình xem, chỉ lưu và cho tải về
         break;
     }
+  } catch (e) {
+    if (fromDrive) removeQuiet(path.dirname(input));
+    throw e;
   } finally {
     removeQuiet(work);
   }
-  await prisma.version.update({ where: { id }, data: { ...data, processingStatus: "READY", progress: 100 } });
-  log(`xong ${v.kind} ${v.originalName}`);
-  await pushToDrive(id);
+  const restored = v.previewPurgedAt ? { previewPurgedAt: null, lastViewedAt: new Date() } : {};
+  await prisma.version.update({ where: { id }, data: { ...data, ...restored, processingStatus: "READY", progress: 100 } });
+  log(`xong ${v.kind} ${v.originalName}${v.previewPurgedAt ? " (tạo lại bản xem)" : ""}`);
+  if (fromDrive) {
+    // file gốc đã có trên Drive: bản vừa tải về chỉ dùng tạm
+    if (KEEP_ORIGINALS) await prisma.version.update({ where: { id }, data: { originalKey: rel(input) } });
+    else removeQuiet(path.dirname(input));
+  } else await pushToDrive(id);
 }
 
 /** Đẩy file gốc lên Google Drive, xong thì xoá bản trên VPS. */
@@ -165,10 +202,16 @@ async function loop(slot: number) {
     } catch (e) {
       const msg = (e as Error).message;
       log(`[${slot}] lỗi ${id ?? ""}: ${msg}`);
-      if (id)
+      if (id) {
+        // tạo lại bản xem bị lỗi: giữ trạng thái "đã dọn" để có thể thử lại, không đánh dấu file hỏng
+        const purged = await prisma.version.findUnique({ where: { id }, select: { previewPurgedAt: true } }).catch(() => null);
         await prisma.version
-          .update({ where: { id }, data: { processingStatus: "FAILED", processingError: msg.slice(0, 1000) } })
+          .update({
+            where: { id },
+            data: { processingStatus: purged?.previewPurgedAt ? "READY" : "FAILED", processingError: msg.slice(0, 1000) },
+          })
           .catch(() => {});
+      }
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
@@ -212,6 +255,7 @@ async function main() {
   void housekeeping();
   void runTelegramBot();
   runTelegramDigest();
+  runPreviewCleanup();
   await Promise.all(Array.from({ length: CONCURRENCY }, (_, i) => loop(i + 1)));
 }
 

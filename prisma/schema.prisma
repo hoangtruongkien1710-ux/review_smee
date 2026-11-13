@@ -187,6 +187,8 @@ model Version {
   spriteCount      Int?
   waveformKey      String?
   pagesKey         String?
+  previewPurgedAt  DateTime? // bản xem đã bị dọn để tiết kiệm ổ đĩa (tạo lại từ file gốc trên Drive khi cần)
+  lastViewedAt     DateTime? // lần cuối có người mở bản xem
   processingStatus ProcessingStatus @default(UPLOADING)
   processingError  String?
   progress         Int              @default(0)
