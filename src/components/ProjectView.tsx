@@ -58,6 +58,7 @@ export function ProjectView({
   const [folderModal, setFolderModal] = useState<{ mode: "new"; parentId: string | null } | { mode: "rename"; folder: F } | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [showShares, setShowShares] = useState(false);
+  const [shareFolder, setShareFolder] = useState<F | null>(null);
 
   const byParent = useMemo(() => {
     const m = new Map<string | null, F[]>();
@@ -128,6 +129,9 @@ export function ProjectView({
             </MenuItem>
             <MenuItem icon={<Pencil size={15} />} onClick={() => (close(), setFolderModal({ mode: "rename", folder: f }))}>
               Đổi tên
+            </MenuItem>
+            <MenuItem icon={<Share2 size={15} />} onClick={() => (close(), setShareFolder(f))}>
+              Chia sẻ thư mục cho khách
             </MenuItem>
             <MenuItem danger icon={<Trash2 size={15} />} onClick={() => (close(), removeFolder(f))}>
               Xoá thư mục
@@ -364,6 +368,13 @@ export function ProjectView({
         }}
       />
       <ShareModal open={showShares} onClose={() => setShowShares(false)} projectId={project.id} assets={[]} />
+      <ShareModal
+        open={!!shareFolder}
+        onClose={() => setShareFolder(null)}
+        projectId={project.id}
+        assets={[]}
+        folders={shareFolder ? [{ id: shareFolder.id, name: shareFolder.name }] : []}
+      />
       <MembersModal open={showMembers} onClose={() => setShowMembers(false)} projectId={project.id} members={members} canManage={role === "MANAGER"} />
       {confirmNode}
     </div>

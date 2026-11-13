@@ -2,7 +2,7 @@
 
 // Tạo và quản lý link chia sẻ cho khách.
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Link2, Lock, Trash2, Eye, Download, MessageSquare, ThumbsUp, Power, Clock } from "lucide-react";
+import { Copy, Link2, Lock, Trash2, Eye, Download, MessageSquare, ThumbsUp, Power, Clock, Folder } from "lucide-react";
 import type { ShareDTO } from "@/lib/share-dto";
 import { cn, timeAgo } from "@/lib/utils";
 import { Modal, PasswordInput, api, useConfirm, useToast } from "./ui";
@@ -29,13 +29,17 @@ export function ShareModal({
   onClose,
   projectId,
   assets,
+  folders = [],
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
-  /** File cần chia sẻ; trống = chỉ xem danh sách link */
+  /** File cần chia sẻ; trống (và không có thư mục) = chỉ xem danh sách link */
   assets: { id: string; name: string }[];
+  /** Thư mục cần chia sẻ (khách xem được cả thư mục con, file thêm sau cũng tự hiện) */
+  folders?: { id: string; name: string }[];
 }) {
+  const picked = assets.length + folders.length;
   const toast = useToast();
   const { confirm, node: confirmNode } = useConfirm();
   const [shares, setShares] = useState<ShareDTO[] | null>(null);
@@ -61,7 +65,11 @@ export function ShareModal({
   useEffect(() => {
     if (!open) return;
     setCreated(null);
-    setName(assets.length === 1 ? assets[0].name : assets.length ? `${assets.length} file` : "");
+    setName(
+      picked === 1
+        ? (assets[0] ?? folders[0]).name
+        : [assets.length && `${assets.length} file`, folders.length && `${folders.length} thư mục`].filter(Boolean).join(", "),
+    );
     setPassword("");
     setDays(0);
     setAllowDownload(false);
@@ -79,6 +87,7 @@ export function ShareModal({
         body: {
           name,
           assetIds: assets.map((a) => a.id),
+          folderIds: folders.map((f) => f.id),
           password: password || undefined,
           expiresAt: days ? new Date(Date.now() + days * 86400_000).toISOString() : null,
           allowDownload,
@@ -125,7 +134,7 @@ export function ShareModal({
   return (
     <Modal open={open} onClose={onClose} title="Chia sẻ cho khách" width={560}>
       <div className="max-h-[75vh] overflow-y-auto pr-1">
-        {assets.length > 0 &&
+        {picked > 0 &&
           (created ? (
             <div className="mb-5 rounded-xl border border-ok/40 bg-ok/10 p-4">
               <p className="mb-2 text-sm font-medium text-ok">Đã tạo link, đã sao chép sẵn để anh/chị gửi khách:</p>
@@ -143,16 +152,25 @@ export function ShareModal({
           ) : (
             <form onSubmit={create} className="mb-5">
               <p className="mb-3 text-sm text-mut">
-                {assets.length === 1 ? (
+                {folders.length === 1 && !assets.length ? (
+                  <>
+                    Thư mục: <b className="text-fg">{folders[0].name}</b>
+                  </>
+                ) : assets.length === 1 && !folders.length ? (
                   <>
                     File: <b className="text-fg">{assets[0].name}</b>
                   </>
                 ) : (
                   <>
-                    Chia sẻ <b className="text-fg">{assets.length} file</b> trong một link
+                    Chia sẻ{" "}
+                    <b className="text-fg">
+                      {[assets.length && `${assets.length} file`, folders.length && `${folders.length} thư mục`].filter(Boolean).join(" và ")}
+                    </b>{" "}
+                    trong một link
                   </>
                 )}
                 . Khách mở link là xem được, không cần tài khoản. Khách chỉ thấy bản mới nhất và không thấy comment nội bộ.
+                {folders.length > 0 && " Khách xem được cả thư mục con, file anh/chị thêm vào thư mục sau này cũng tự hiện trong link."}
               </p>
               <label className="label">Tên link (để anh/chị dễ nhận ra)</label>
               <input className="input mb-3" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
@@ -175,7 +193,7 @@ export function ShareModal({
               <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2">
                 {toggle(allowComment, setAllowComment, <MessageSquare size={14} className="text-mut" />, "Cho comment")}
                 {toggle(allowApprove, setAllowApprove, <ThumbsUp size={14} className="text-mut" />, "Cho duyệt")}
-                {toggle(allowDownload, setAllowDownload, <Download size={14} className="text-mut" />, "Cho tải file gốc")}
+                {toggle(allowDownload, setAllowDownload, <Download size={14} className="text-mut" />, folders.length ? "Cho tải file/thư mục về" : "Cho tải file gốc về")}
               </div>
               <button className="btn-primary w-full" disabled={busy || !name.trim()}>
                 <Link2 size={15} /> Tạo link
@@ -187,7 +205,7 @@ export function ShareModal({
         {!shares ? (
           <p className="text-sm text-mut">Đang tải…</p>
         ) : shares.length === 0 ? (
-          <p className="text-sm text-mut">Chưa có link nào. Chọn file rồi bấm Chia sẻ để tạo.</p>
+          <p className="text-sm text-mut">Chưa có link nào. Chọn file hoặc thư mục rồi bấm Chia sẻ để tạo.</p>
         ) : (
           <ul className="space-y-2">
             {shares.map((s) => {
@@ -196,7 +214,7 @@ export function ShareModal({
               return (
                 <li key={s.id} className={cn("rounded-lg border border-line p-3", off && "opacity-60")}>
                   <div className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium" title={s.assets.map((a) => a.name).join(", ")}>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium" title={[...s.folders.map((f) => `📁 ${f.name}`), ...s.assets.map((a) => a.name)].join(", ")}>
                       {s.name}
                     </span>
                     <button className="btn-icon size-7" title="Sao chép link" onClick={() => copy(shareUrl(s.token), toast)}>
@@ -214,7 +232,12 @@ export function ShareModal({
                     </button>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-mut">
-                    <span>{s.assets.length} file</span>
+                    {s.folders.length > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <Folder size={11} /> {s.folders.length} thư mục
+                      </span>
+                    )}
+                    {(s.assets.length > 0 || !s.folders.length) && <span>{s.assets.length} file</span>}
                     {s.hasPassword && (
                       <span className="inline-flex items-center gap-1">
                         <Lock size={11} /> Có mật khẩu
@@ -230,7 +253,7 @@ export function ShareModal({
                       <Eye size={11} /> {s.viewCount} lượt xem{s.lastViewedAt ? ` · ${timeAgo(s.lastViewedAt)}` : ""}
                     </span>
                     <span>
-                      {[s.allowComment && "comment", s.allowApprove && "duyệt", s.allowDownload && "tải gốc"].filter(Boolean).join(", ") || "chỉ xem"}
+                      {[s.allowComment && "comment", s.allowApprove && "duyệt", s.allowDownload && "cho tải về"].filter(Boolean).join(", ") || "chỉ xem"}
                     </span>
                     <span className="text-dim">
                       {s.createdBy ?? "?"} · {timeAgo(s.createdAt)}

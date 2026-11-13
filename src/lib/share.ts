@@ -31,7 +31,11 @@ export type ShareRow = NonNullable<Awaited<ReturnType<typeof findShare>>>;
 function findShare(token: string) {
   return prisma.shareLink.findUnique({
     where: { token },
-    include: { project: { select: { id: true, name: true } }, assets: { orderBy: { sortOrder: "asc" }, select: { assetId: true } } },
+    include: {
+      project: { select: { id: true, name: true } },
+      assets: { orderBy: { sortOrder: "asc" }, select: { assetId: true } },
+      folders: { orderBy: { sortOrder: "asc" }, select: { folderId: true } },
+    },
   });
 }
 
@@ -63,11 +67,59 @@ export async function requireShare(token: string) {
   return st.share;
 }
 
+export type ShareFolder = { id: string; name: string; parentId: string | null };
+
+/** Phạm vi link: các thư mục được chia sẻ (gồm cả thư mục con) và file chia sẻ lẻ. */
+export async function shareScope(share: ShareRow) {
+  const direct = new Set(share.assets.map((a) => a.assetId));
+  const folders = new Map<string, ShareFolder>();
+  const roots: ShareFolder[] = [];
+  if (share.folders.length) {
+    const all = await prisma.folder.findMany({ where: { projectId: share.projectId }, select: { id: true, name: true, parentId: true }, orderBy: { name: "asc" } });
+    const byId = new Map(all.map((f) => [f.id, f]));
+    const kids = new Map<string, ShareFolder[]>();
+    for (const f of all) if (f.parentId) kids.set(f.parentId, [...(kids.get(f.parentId) ?? []), f]);
+    const walk = (f: ShareFolder) => {
+      if (folders.has(f.id)) return;
+      folders.set(f.id, f);
+      for (const k of kids.get(f.id) ?? []) walk(k);
+    };
+    for (const { folderId } of share.folders) {
+      const f = byId.get(folderId);
+      if (f && !folders.has(f.id)) roots.push(f);
+      if (f) walk(f);
+    }
+    // thư mục được chia sẻ nằm trong thư mục khác cũng được chia sẻ → không hiện ở gốc
+    for (let i = roots.length - 1; i >= 0; i--) {
+      let p = roots[i].parentId;
+      while (p && !share.folders.some((x) => x.folderId === p)) p = byId.get(p)?.parentId ?? null;
+      if (p) roots.splice(i, 1);
+    }
+  }
+  const rootIds = new Set(roots.map((r) => r.id));
+  /** Đường dẫn từ thư mục gốc được chia sẻ tới thư mục f (để hiện breadcrumb, đặt tên trong file zip). */
+  const pathOf = (id: string): ShareFolder[] => {
+    const out: ShareFolder[] = [];
+    let f = folders.get(id);
+    while (f) {
+      out.unshift(f);
+      if (rootIds.has(f.id)) break;
+      f = f.parentId ? folders.get(f.parentId) : undefined;
+    }
+    return out;
+  };
+  const has = (a: { id: string; folderId: string | null }) => direct.has(a.id) || (!!a.folderId && folders.has(a.folderId));
+  return { direct, folders, roots, pathOf, has };
+}
+
 /** Asset có nằm trong link không (và chưa bị xoá). */
 export async function requireSharedAsset(share: ShareRow, assetId: string) {
-  if (!share.assets.some((a) => a.assetId === assetId)) throw new HttpError(404, "Không tìm thấy file");
   const a = await prisma.asset.findUnique({ where: { id: assetId } });
   if (!a || a.deletedAt || a.projectId !== share.projectId) throw new HttpError(404, "Không tìm thấy file");
+  if (!share.assets.some((x) => x.assetId === assetId)) {
+    const scope = share.folders.length ? await shareScope(share) : null;
+    if (!scope?.has(a)) throw new HttpError(404, "Không tìm thấy file");
+  }
   return a;
 }
 
@@ -90,6 +142,7 @@ export async function unlockShare(token: string, password: string) {
 export const shareInclude = {
   createdBy: { select: { name: true } },
   assets: { orderBy: { sortOrder: "asc" as const }, include: { asset: { select: { id: true, name: true, deletedAt: true } } } },
+  folders: { orderBy: { sortOrder: "asc" as const }, include: { folder: { select: { id: true, name: true } } } },
 };
 
 type ShareWithAssets = {
@@ -107,6 +160,7 @@ type ShareWithAssets = {
   createdAt: Date;
   createdBy: { name: string } | null;
   assets: { asset: { id: string; name: string; deletedAt: Date | null } }[];
+  folders: { folder: { id: string; name: string } }[];
 };
 
 export function shareDTO(s: ShareWithAssets): ShareDTO {
@@ -125,6 +179,7 @@ export function shareDTO(s: ShareWithAssets): ShareDTO {
     createdBy: s.createdBy?.name ?? null,
     createdAt: s.createdAt.toISOString(),
     assets: s.assets.filter((x) => !x.asset.deletedAt).map((x) => ({ id: x.asset.id, name: x.asset.name })),
+    folders: s.folders.map((x) => ({ id: x.folder.id, name: x.folder.name })),
   };
 }
 

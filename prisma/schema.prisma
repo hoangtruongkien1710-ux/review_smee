@@ -128,6 +128,7 @@ model Folder {
   driveFolderId String?
   createdAt     DateTime @default(now())
   assets        Asset[]
+  shares        ShareLinkFolder[]
 
   @@index([projectId])
 }
@@ -294,7 +295,8 @@ model ShareLink {
   createdBy     User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt     DateTime  @default(now())
 
-  assets ShareLinkAsset[]
+  assets  ShareLinkAsset[]
+  folders ShareLinkFolder[]
 
   @@index([projectId])
 }
@@ -332,4 +334,16 @@ model Approval {
 
   @@index([versionId])
   @@index([createdAt])
+}
+
+/// Thư mục được chia sẻ trong link: khách xem mọi file trong thư mục và thư mục con (tự cập nhật).
+model ShareLinkFolder {
+  shareId   String
+  share     ShareLink @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  folderId  String
+  folder    Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  sortOrder Int       @default(0)
+
+  @@id([shareId, folderId])
+  @@index([folderId])
 }

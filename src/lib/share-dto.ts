@@ -14,5 +14,6 @@ export type ShareDTO = {
   createdBy: string | null;
   createdAt: string;
   assets: { id: string; name: string }[];
+  folders: { id: string; name: string }[];
 };
 

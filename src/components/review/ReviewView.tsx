@@ -881,10 +881,10 @@ export function ReviewView({
           <Link href={base} className="truncate hover:text-fg">
             {guest ? guest.shareName : project.name}
           </Link>
-          {folder && !guest && (
+          {folder && (
             <>
               <ChevronRight size={14} className="shrink-0" />
-              <Link href={`/projects/${project.id}?folder=${folder.id}`} className="truncate hover:text-fg">
+              <Link href={guest ? `${base}?f=${folder.id}` : `/projects/${project.id}?folder=${folder.id}`} className="truncate hover:text-fg">
                 {folder.name}
               </Link>
             </>

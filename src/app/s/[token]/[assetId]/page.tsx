@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { shareState, touchShare } from "@/lib/share";
+import { shareScope, shareState, touchShare } from "@/lib/share";
 import { getAsset, versionDTO } from "@/lib/assets";
 import { ShareGate } from "@/components/ShareGate";
 import { ReviewView } from "@/components/review/ReviewView";
@@ -17,17 +17,30 @@ export default async function ShareAssetPage({
   const st = await shareState(token);
   if (!st.ok) return <ShareGate token={token} reason={st.reason} name={st.share?.name} />;
   const share = st.share;
-  if (!share.assets.some((a) => a.assetId === assetId)) notFound();
   const asset = await getAsset(assetId);
   if (!asset || asset.deletedAt || asset.projectId !== share.projectId || !asset.version) notFound();
+  const scope = await shareScope(share);
+  if (!scope.has(asset)) notFound();
   await touchShare(share.id);
 
-  const live = await prisma.asset.findMany({
-    where: { id: { in: share.assets.map((a) => a.assetId) }, deletedAt: null },
-    select: { id: true },
-  });
-  const liveSet = new Set(live.map((x) => x.id));
-  const siblingIds = share.assets.map((a) => a.assetId).filter((id) => liveSet.has(id));
+  // file chia sẻ lẻ: chuyển qua lại giữa các file lẻ; file trong thư mục: giữa các file cùng thư mục
+  const inFolder = !scope.direct.has(asset.id) && asset.folderId ? scope.folders.get(asset.folderId) ?? null : null;
+  let siblingIds: string[];
+  if (inFolder) {
+    const rows = await prisma.asset.findMany({
+      where: { projectId: share.projectId, folderId: inFolder.id, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    });
+    siblingIds = rows.map((x) => x.id);
+  } else {
+    const live = await prisma.asset.findMany({
+      where: { id: { in: share.assets.map((a) => a.assetId) }, deletedAt: null },
+      select: { id: true },
+    });
+    const liveSet = new Set(live.map((x) => x.id));
+    siblingIds = share.assets.map((a) => a.assetId).filter((id) => liveSet.has(id));
+  }
   const current = await prisma.version.findUniqueOrThrow({
     where: { id: asset.version.id },
     include: { uploadedBy: { select: { name: true } } },
@@ -37,7 +50,7 @@ export default async function ShareAssetPage({
     <ReviewView
       key={assetId}
       project={{ id: share.project.id, name: share.project.name }}
-      folder={null}
+      folder={inFolder ? { id: inFolder.id, name: inFolder.name } : null}
       asset={{ ...asset, commentCount: 0, assigneeName: null, assigneeId: null }}
       versions={[versionDTO(current)]}
       siblingIds={siblingIds}
