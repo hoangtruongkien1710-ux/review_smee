@@ -1,0 +1,14 @@
+# Reverse proxy HTTPS cho Smee Review. Tên miền lấy từ biến DOMAIN trong .env.
+{$DOMAIN} {
+	encode zstd gzip
+	# file gốc có thể rất lớn
+	request_body {
+		max_size 50GB
+	}
+	reverse_proxy web:3000 {
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}

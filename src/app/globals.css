@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0e0f12;
+  --color-panel: #15171c;
+  --color-panel-2: #1b1e24;
+  --color-line: #262a32;
+  --color-line-2: #323743;
+  --color-fg: #eceef2;
+  --color-mut: #9aa1ad;
+  --color-dim: #6b7280;
+  --color-accent: #ff6b4a;
+  --color-accent-2: #ff8a6e;
+  --color-ok: #17c964;
+  --color-warn: #f5a524;
+  --color-err: #f43f5e;
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+* { scrollbar-width: thin; scrollbar-color: #323743 transparent; }
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 h-9 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
+}
+@utility btn-primary { @apply btn bg-accent text-white hover:bg-accent-2; }
+@utility btn-ghost { @apply btn text-fg hover:bg-panel-2; }
+@utility btn-outline { @apply btn border border-line-2 text-fg hover:bg-panel-2; }
+@utility btn-danger { @apply btn bg-err/90 text-white hover:bg-err; }
+@utility btn-icon { @apply inline-flex items-center justify-center rounded-lg size-8 text-mut hover:text-fg hover:bg-panel-2 transition-colors; }
+
+@utility input {
+  @apply w-full h-9 rounded-lg bg-bg border border-line-2 px-3 text-sm text-fg placeholder:text-dim outline-none focus:border-accent;
+}
+textarea.input { @apply h-auto py-2; }
+select.input { @apply pr-8; }
+@utility label { @apply block text-xs font-medium text-mut mb-1.5; }
+@utility card { @apply rounded-xl border border-line bg-panel; }

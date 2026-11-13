@@ -1,0 +1,12 @@
+node_modules
+.next
+src/generated
+.env
+.env.*
+!.env.example
+data
+secrets
+*.log
+.git
+kehoach.md
+docs

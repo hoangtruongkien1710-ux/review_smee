@@ -1,0 +1,12 @@
+node_modules
+.next
+src/generated
+.env
+.env.local
+data
+secrets/*
+!secrets/README.txt
+*.log
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store

@@ -1,0 +1,332 @@
+// Smee Review - mô hình dữ liệu (PostgreSQL + Prisma)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ProjectRole {
+  MANAGER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
+enum AssetKind {
+  VIDEO
+  AUDIO
+  IMAGE
+  PDF
+  DOCUMENT
+  OTHER
+}
+
+enum ProcessingStatus {
+  UPLOADING
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String?
+  color        String     @default("#FF6B4A")
+  role         Role       @default(MEMBER)
+  status       UserStatus @default(ACTIVE)
+  lastActiveAt DateTime?
+  /// Telegram: chat id sau khi người dùng bấm "Kết nối Telegram"
+  telegramChatId    String?   @unique
+  telegramName      String?
+  telegramLinkCode  String?   @unique
+  telegramLinkUntil DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions        Session[]
+  memberships     ProjectMember[]
+  projectsCreated Project[]       @relation("ProjectCreator")
+  assetsCreated   Asset[]         @relation("AssetCreator")
+  assetsAssigned  Asset[]         @relation("AssetAssignee")
+  versions        Version[]
+  comments        Comment[]
+  notifications   Notification[]
+  uploads         Upload[]
+  approvals       Approval[]
+  sharesCreated   ShareLink[]
+}
+
+model Session {
+  id        String   @id // token hash
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+
+  @@index([userId])
+}
+
+model Project {
+  id                 String   @id @default(cuid())
+  name               String
+  description        String   @default("")
+  color              String   @default("#FF6B4A")
+  archived           Boolean  @default(false)
+  driveFolderId      String?
+  driveTrashFolderId String?
+  createdById        String?
+  createdBy          User?    @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  members ProjectMember[]
+  folders Folder[]
+  assets  Asset[]
+  shares  ShareLink[]
+}
+
+model ProjectMember {
+  projectId String
+  userId    String
+  role      ProjectRole @default(EDITOR)
+  createdAt DateTime    @default(now())
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model Folder {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId      String?
+  parent        Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      Folder[] @relation("FolderTree")
+  name          String
+  driveFolderId String?
+  createdAt     DateTime @default(now())
+  assets        Asset[]
+
+  @@index([projectId])
+}
+
+model Asset {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  folderId         String?
+  folder           Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  name             String
+  kind             AssetKind @default(OTHER)
+  status           String    @default("not_started")
+  assigneeId       String?
+  assignee         User?     @relation("AssetAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  dueDate          DateTime?
+  sortOrder        Int       @default(0)
+  currentVersionId String?   @unique
+  currentVersion   Version?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  createdById      String?
+  createdBy        User?     @relation("AssetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  versions  Version[] @relation("AssetVersions")
+  comments  Comment[]
+  shares    ShareLinkAsset[]
+  approvals Approval[]
+
+  @@index([projectId, folderId])
+}
+
+model Version {
+  id               String           @id @default(cuid())
+  assetId          String
+  asset            Asset            @relation("AssetVersions", fields: [assetId], references: [id], onDelete: Cascade)
+  currentOf        Asset?           @relation("CurrentVersion")
+  versionNo        Int
+  originalName     String
+  mimeType         String
+  kind             AssetKind
+  size             BigInt           @default(0)
+  // media info (đọc bằng ffprobe)
+  durationSec      Float?
+  fps              Float?
+  width            Int?
+  height           Int?
+  pageCount        Int?
+  // lưu trữ
+  originalKey      String? // file gốc tạm thời trên VPS (xoá sau khi đẩy lên Drive)
+  driveFileId      String?
+  proxyKey         String? // bản xem (mp4 / mp3 / pdf / ảnh)
+  thumbKey         String?
+  spriteKey        String? // ảnh scrub
+  spriteCols       Int?
+  spriteCount      Int?
+  waveformKey      String?
+  pagesKey         String?
+  processingStatus ProcessingStatus @default(UPLOADING)
+  processingError  String?
+  progress         Int              @default(0)
+  uploadedById     String?
+  uploadedBy       User?            @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now())
+
+  comments  Comment[]
+  approvals Approval[]
+
+  @@unique([assetId, versionNo])
+}
+
+model Comment {
+  id         String    @id @default(cuid())
+  assetId    String
+  asset      Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  versionId  String?
+  version    Version?  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  parentId   String?
+  parent     Comment?  @relation("Thread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    Comment[] @relation("Thread")
+  authorId   String?
+  author     User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  guestName  String?
+  body       String
+  timeStart  Float?
+  timeEnd    Float?
+  page       Int?
+  pinX       Float?
+  pinY       Float?
+  annotation Json?
+  internal   Boolean   @default(false)
+  /// Số phiên bản gốc khi comment được chuyển sang bản khác (vì bản gốc đã bị xoá)
+  originVersionNo Int?
+  resolved   Boolean   @default(false)
+  resolvedAt DateTime?
+  /// Khách comment qua link chia sẻ nào
+  shareLinkId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([assetId])
+  @@index([versionId])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorName  String
+  actorColor String?
+  text       String
+  excerpt    String?
+  link       String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+// Phiên upload chia nhỏ (tiếp tục được khi rớt mạng)
+model Upload {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String
+  folderId      String?
+  assetId       String? // upload phiên bản mới cho asset có sẵn
+  fileName      String
+  mimeType      String
+  size          BigInt
+  chunkSize     Int
+  receivedBytes BigInt   @default(0)
+  versionId     String? // tạo khi upload xong
+  completed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Setting {
+  key   String @id
+  value Json
+}
+
+/// Link chia sẻ cho khách: xem + comment + duyệt không cần tài khoản
+model ShareLink {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String
+  passwordHash  String?
+  expiresAt     DateTime?
+  allowDownload Boolean   @default(false)
+  allowComment  Boolean   @default(true)
+  allowApprove  Boolean   @default(true)
+  disabled      Boolean   @default(false)
+  viewCount     Int       @default(0)
+  lastViewedAt  DateTime?
+  createdById   String?
+  createdBy     User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+
+  assets ShareLinkAsset[]
+
+  @@index([projectId])
+}
+
+model ShareLinkAsset {
+  shareId   String
+  share     ShareLink @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  sortOrder Int       @default(0)
+
+  @@id([shareId, assetId])
+  @@index([assetId])
+}
+
+enum ApprovalDecision {
+  APPROVED
+  CHANGES
+}
+
+/// Quyết định duyệt / cần sửa cho một phiên bản
+model Approval {
+  id          String           @id @default(cuid())
+  assetId     String
+  asset       Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  versionId   String
+  version     Version          @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestName   String?
+  shareLinkId String?
+  decision    ApprovalDecision
+  note        String           @default("")
+  createdAt   DateTime         @default(now())
+
+  @@index([versionId])
+  @@index([createdAt])
+}

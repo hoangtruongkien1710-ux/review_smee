@@ -1,0 +1,97 @@
+# Smee Review - chạy: docker compose up -d --build
+# Mở trình duyệt: http://localhost:3000 (trên VPS: http://<IP-VPS>:<APP_PORT>)
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://smee:${POSTGRES_PASSWORD:-smee-doi-mat-khau}@db:5432/smee
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  STORAGE_DIR: /data/storage
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_GROUP_CHAT_ID: ${TELEGRAM_GROUP_CHAT_ID:-}
+  TELEGRAM_DIGEST_QUIET_MIN: ${TELEGRAM_DIGEST_QUIET_MIN:-10}
+  TELEGRAM_DIGEST_MAX_MIN: ${TELEGRAM_DIGEST_MAX_MIN:-60}
+  GOOGLE_DRIVE_ROOT_FOLDER_ID: ${GOOGLE_DRIVE_ROOT_FOLDER_ID:-}
+  GOOGLE_APPS_SCRIPT_URL: ${GOOGLE_APPS_SCRIPT_URL:-}
+  GOOGLE_APPS_SCRIPT_KEY: ${GOOGLE_APPS_SCRIPT_KEY:-}
+  GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+  GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+  GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+  GOOGLE_OAUTH_REFRESH_TOKEN: ${GOOGLE_OAUTH_REFRESH_TOKEN:-}
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smee
+      POSTGRES_USER: smee
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smee-doi-mat-khau}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smee -d smee"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    image: smee-review:latest
+    pull_policy: build
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    volumes:
+      - storage:/data/storage
+      - ./secrets:/secrets:ro
+
+  worker:
+    image: smee-review:latest
+    pull_policy: never # dùng image vừa build ở service web, không tải từ internet
+    command: ["worker"]
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      MAX_PDF_PAGES: ${MAX_PDF_PAGES:-300}
+    volumes:
+      - storage:/data/storage
+      - ./secrets:/secrets:ro
+
+  # HTTPS cho tên miền (dùng trên VPS): đặt DOMAIN=review.smee.vn trong .env rồi chạy
+  #   docker compose --profile https up -d
+  # Caddy tự xin và gia hạn chứng chỉ Let's Encrypt. Cần mở cổng 80 và 443 trên VPS.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-data:
+  storage:
+  caddy-data:
+  caddy-config:
