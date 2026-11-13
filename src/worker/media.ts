@@ -61,11 +61,13 @@ export async function probe(file: string): Promise<Probe> {
   };
 }
 
-/** Bản xem video: H.264 tối đa 1920px cạnh dài, AAC, phát được ngay khi đang tải (faststart). */
+/** Bản xem video: H.264, cạnh dài tối đa PROXY_MAX_SIZE (mặc định 3840 = giữ đến 4K), nén CRF PROXY_CRF (mặc định 19 = nét), AAC, faststart. */
 export async function videoProxy(input: string, out: string, info: Probe, onProgress: (pct: number) => void) {
-  const scale = "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))':flags=lanczos,format=yuv420p";
+  const max = Math.max(480, Number(process.env.PROXY_MAX_SIZE) || 3840);
+  const crf = String(Math.min(35, Math.max(14, Number(process.env.PROXY_CRF) || 19)));
+  const scale = `scale='if(gte(iw,ih),min(${max},iw),-2)':'if(gte(iw,ih),-2,min(${max},ih))':flags=lanczos,format=yuv420p`;
   const args = ["-y", "-hide_banner", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-vf", scale,
-    "-c:v", "libx264", "-preset", process.env.FFMPEG_PRESET || "veryfast", "-crf", "23", "-profile:v", "high",
+    "-c:v", "libx264", "-preset", process.env.FFMPEG_PRESET || "veryfast", "-crf", crf, "-profile:v", "high",
     "-c:a", "aac", "-b:a", "160k", "-ac", "2", "-movflags", "+faststart",
     "-threads", String(process.env.FFMPEG_THREADS || 0), "-progress", "pipe:1", "-nostats", out];
   await run("ffmpeg", args, {
@@ -116,12 +118,12 @@ export async function waveform(input: string, out: string, points = 1000) {
   fs.writeFileSync(out, JSON.stringify(peaks));
 }
 
-/** Ảnh xem trước tối đa 2560px. Thử FFmpeg trước, không được thì ImageMagick (PSD, HEIC…). */
+/** Ảnh xem trước tối đa 4096px. Thử FFmpeg trước, không được thì ImageMagick (PSD, HEIC…). */
 export async function imagePreview(input: string, out: string) {
   try {
-    await run("ffmpeg", ["-y", "-hide_banner", "-i", input, "-frames:v", "1", "-vf", "scale='min(2560,iw)':-2", "-q:v", "3", out]);
+    await run("ffmpeg", ["-y", "-hide_banner", "-i", input, "-frames:v", "1", "-vf", "scale='min(4096,iw)':-2", "-q:v", "2", out]);
   } catch {
-    await run("convert", [`${input}[0]`, "-auto-orient", "-resize", "2560x2560>", "-quality", "88", out]);
+    await run("convert", [`${input}[0]`, "-auto-orient", "-resize", "4096x4096>", "-quality", "92", out]);
   }
 }
 
