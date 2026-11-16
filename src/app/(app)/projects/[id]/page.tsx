@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requirePageUser } from "@/lib/auth";
+import { isAdmin, requirePageUser } from "@/lib/auth";
 import { projectRole } from "@/lib/access";
 import { listAssets } from "@/lib/assets";
 import { ProjectView } from "@/components/ProjectView";
@@ -35,9 +35,9 @@ export default async function ProjectPage({
     trash ? { projectId: id, deletedAt: { not: null } } : { projectId: id, folderId: currentFolder, deletedAt: null },
   );
 
-  // Thư mục Drive tương ứng (khách hàng không thấy). Thư mục chưa có file gốc nào thì Drive chưa tạo, dùng thư mục project.
+  // Thư mục Drive tương ứng (chỉ quản trị viên thấy). Thư mục chưa có file gốc nào thì Drive chưa tạo, dùng thư mục project.
   const driveFolderId =
-    user.role === "CLIENT"
+    !isAdmin(user)
       ? null
       : ((currentFolder && folders.find((f) => f.id === currentFolder)?.driveFolderId) || project.driveFolderId);
 

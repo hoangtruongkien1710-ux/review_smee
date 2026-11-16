@@ -84,6 +84,12 @@ function useLocal<T extends string>(key: string, init: T) {
   return [v, set] as const;
 }
 
+/** Nhãn chất lượng theo cạnh ngắn của khung hình: 4K, 1440p, 1080p, 720p... */
+const qualityLabel = (w: number, h: number) => {
+  const s = Math.min(w, h);
+  return s >= 2160 ? "4K" : s >= 1440 ? "2K" : `${s}p`;
+};
+
 const isTyping = (e: KeyboardEvent) => {
   const t = e.target as HTMLElement | null;
   return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -119,7 +125,7 @@ export function ReviewView({
   initialCommentId?: string | null;
   /** Khách xem qua link chia sẻ */
   guest?: GuestCtx | null;
-  /** Link Google Drive (chỉ nhân viên): thư mục chứa file và từng phiên bản */
+  /** Link Google Drive (chỉ quản trị viên): thư mục chứa file và từng phiên bản */
   drive?: DriveLinks | null;
 }) {
   const router = useRouter();
@@ -854,7 +860,16 @@ export function ReviewView({
           <dt>{t("Độ phân giải")}</dt>
           <dd className="text-fg">
             {v.width}×{v.height}
+            {v.height ? ` (${qualityLabel(v.width, v.height)})` : ""}
           </dd>
+          {v.kind === "VIDEO" && vidSize && (
+            <>
+              <dt>{t("Bản xem")}</dt>
+              <dd className="text-fg">
+                {vidSize.w}×{vidSize.h} ({qualityLabel(vidSize.w, vidSize.h)})
+              </dd>
+            </>
+          )}
         </>
       ) : null}
       {v.pageCount ? (
@@ -1142,6 +1157,16 @@ export function ReviewView({
                 }}
                 fullscreen={fullscreen}
                 onFullscreen={view === "video" ? toggleFullscreen : undefined}
+                extra={
+                  view === "video" && vidSize ? (
+                    <span
+                      className="mr-1 rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-mut"
+                      title={`${t("Chất lượng xem")}: ${vidSize.w}×${vidSize.h}${v?.width && v.height ? ` · ${t("File gốc")}: ${v.width}×${v.height}` : ""}`}
+                    >
+                      {qualityLabel(vidSize.w, vidSize.h)}
+                    </span>
+                  ) : undefined
+                }
               />
             </div>
           )}
