@@ -61,9 +61,12 @@ export async function probe(file: string): Promise<Probe> {
   };
 }
 
-/** Bản xem video: H.264, cạnh dài tối đa PROXY_MAX_SIZE (mặc định 3840 = giữ đến 4K), nén CRF PROXY_CRF (mặc định 19 = nét), AAC, faststart. */
+/** Cạnh dài tối đa của bản xem video (PROXY_MAX_SIZE, mặc định 2560 = 2K). */
+export const proxyMax = () => Math.max(480, Number(process.env.PROXY_MAX_SIZE) || 2560);
+
+/** Bản xem video: H.264, cạnh dài tối đa PROXY_MAX_SIZE (mặc định 2560 = 2K), nén CRF PROXY_CRF (mặc định 19 = nét), AAC, faststart. */
 export async function videoProxy(input: string, out: string, info: Probe, onProgress: (pct: number) => void) {
-  const max = Math.max(480, Number(process.env.PROXY_MAX_SIZE) || 3840);
+  const max = proxyMax();
   const crf = String(Math.min(35, Math.max(14, Number(process.env.PROXY_CRF) || 19)));
   const scale = `scale='if(gte(iw,ih),min(${max},iw),-2)':'if(gte(iw,ih),-2,min(${max},ih))':flags=lanczos,format=yuv420p`;
   const args = ["-y", "-hide_banner", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-vf", scale,

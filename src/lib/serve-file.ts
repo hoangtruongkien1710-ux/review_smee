@@ -17,6 +17,7 @@ type V = {
   driveFileId: string | null;
   pagesKey: string | null;
   proxyKey: string | null;
+  proxyDriveId?: string | null;
   thumbKey: string | null;
   spriteKey: string | null;
   waveformKey: string | null;
@@ -85,6 +86,23 @@ function sendFile(req: Request, file: string, mime: string, extra: Record<string
 }
 
 
+/** Chuyển tiếp file từ Google Drive cho trình duyệt (hỗ trợ Range để tua), không lưu lại trên VPS. */
+async function sendFromDrive(req: Request, fileId: string, mime: string, extra: Record<string, string> = {}, what = "file") {
+  const r = await drive.download(fileId, req.headers.get("range"));
+  if (r.status === 416) return new Response(null, { status: 416, headers: { "Content-Range": r.headers.get("content-range") ?? "" } });
+  if (!r.ok) {
+    void r.body?.cancel().catch(() => {});
+    throw new HttpError(502, `Không tải được ${what} từ Google Drive, thử lại sau ít phút`);
+  }
+  const h = new Headers({ "Content-Type": mime, "Cache-Control": "private, max-age=86400", ...SAFE_HEADERS, ...extra });
+  for (const k of ["content-length", "content-range", "accept-ranges"]) {
+    const val = r.headers.get(k);
+    if (val) h.set(k, val);
+  }
+  if (!h.has("accept-ranges")) h.set("Accept-Ranges", "bytes");
+  return new Response(r.body, { status: r.status, headers: h });
+}
+
 export async function serveVersionFile(req: Request, v: V, type: string, opts: { allowOriginal?: boolean } = {}) {
   if (type === "original") {
     if (opts.allowOriginal === false) throw new HttpError(403, "Link này không cho tải file gốc");
@@ -94,19 +112,7 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
     const mime = inline ? v.mimeType : "application/octet-stream";
     if (v.originalKey && fs.existsSync(abs(v.originalKey)))
       return sendFile(req, abs(v.originalKey), mime, { "Content-Disposition": disp });
-    if (v.driveFileId) {
-      const r = await drive.download(v.driveFileId, req.headers.get("range"));
-      if (!r.ok && r.status !== 206) throw new HttpError(502, "Không tải được file gốc từ Google Drive");
-      const h = new Headers();
-      for (const k of ["content-length", "content-range", "accept-ranges"]) {
-        const val = r.headers.get(k);
-        if (val) h.set(k, val);
-      }
-      h.set("Content-Type", mime);
-      h.set("Content-Disposition", disp);
-      for (const [k, val] of Object.entries(SAFE_HEADERS)) h.set(k, val);
-      return new Response(r.body, { status: r.status, headers: h });
-    }
+    if (v.driveFileId) return sendFromDrive(req, v.driveFileId, mime, { "Content-Disposition": disp }, "file gốc");
     throw new HttpError(404, "File gốc không còn");
   }
 
@@ -123,5 +129,8 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
     // ghi nhận lần mở để tác vụ dọn ổ đĩa giữ lại file đang được xem
     void prisma.version.update({ where: { id: v.id }, data: { lastViewedAt: new Date() } }).catch(() => {});
   const ext = key.split(".").pop() ?? "";
-  return sendFile(req, abs(key), MIME[ext] ?? "application/octet-stream");
+  const mime = MIME[ext] ?? "application/octet-stream";
+  // bản xem đã lên Drive (file trên VPS đã xoá) → phát từ Drive; còn bản trên VPS thì dùng bản đó cho nhanh
+  if (type === "proxy" && v.proxyDriveId && !fs.existsSync(abs(key))) return sendFromDrive(req, v.proxyDriveId, mime, {}, "bản xem");
+  return sendFile(req, abs(key), mime);
 }

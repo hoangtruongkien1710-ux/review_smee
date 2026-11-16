@@ -49,7 +49,7 @@ export const POST = route(async (req) => {
       const versions = await prisma.version.findMany({ where: { assetId: { in: ids } } });
       await prisma.asset.deleteMany({ where: { id: { in: ids } } });
       removeVersionFiles(versions);
-      sync.deleteFiles(versions.map((v) => v.driveFileId));
+      sync.deleteFiles(versions.flatMap((v) => [v.driveFileId, v.proxyDriveId]));
       break;
     }
     case "move": {
