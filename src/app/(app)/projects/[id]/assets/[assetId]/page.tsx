@@ -36,8 +36,22 @@ export default async function AssetPage({
     if (c && c.assetId === assetId && !(c.internal && user.role === "CLIENT")) initialVersionId = c.versionId;
   }
 
+  // Link Google Drive cho nhân viên (khách không nhận được)
+  const driveLinks =
+    user.role === "CLIENT"
+      ? null
+      : {
+          folder: (folder?.driveFolderId ?? project.driveFolderId)
+            ? `https://drive.google.com/drive/folders/${folder?.driveFolderId ?? project.driveFolderId}`
+            : null,
+          files: Object.fromEntries(
+            versions.filter((x) => x.driveFileId).map((x) => [x.id, `https://drive.google.com/file/d/${x.driveFileId}/view`]),
+          ),
+        };
+
   return (
     <ReviewView
+      drive={driveLinks}
       key={assetId}
       project={{ id: project.id, name: project.name }}
       folder={folder ? { id: folder.id, name: folder.name } : null}

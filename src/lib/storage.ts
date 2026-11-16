@@ -33,8 +33,19 @@ export function safeName(name: string) {
       .replace(/[\\/:*?"<>|\x00-\x1f]/g, "_")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 180) || "file"
+      .slice(0, 180)
+      .replace(/^\.+$/, "") || "file"
   );
+}
+
+/** Dung lượng còn trống trên ổ chứa STORAGE_DIR (byte). */
+export function freeBytes() {
+  try {
+    const s = fs.statfsSync(STORAGE_DIR);
+    return s.bavail * s.bsize;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
 
 export function removeQuiet(p: string) {

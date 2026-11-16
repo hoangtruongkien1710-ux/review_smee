@@ -5,7 +5,7 @@ import { route, parse } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { HttpError, requireUser } from "@/lib/auth";
 import { requireProject } from "@/lib/access";
-import { dirs, ensureDirs } from "@/lib/storage";
+import { dirs, ensureDirs, freeBytes } from "@/lib/storage";
 
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MAX_SIZE = 200 * 1024 ** 3; // 200 GB
@@ -29,6 +29,10 @@ export const POST = route(async (req) => {
   if (b.assetId && !(await prisma.asset.findFirst({ where: { id: b.assetId, projectId: b.projectId, deletedAt: null } })))
     throw new HttpError(400, "File gốc để thêm phiên bản không tồn tại");
   ensureDirs();
+  // không nhận file làm ổ VPS còn dưới mức tối thiểu (mặc định 5 GB), tránh đầy ổ làm sập cả máy chủ
+  const reserve = Math.max(1, Number(process.env.UPLOAD_MIN_FREE_GB) || 5) * 1024 ** 3;
+  if (b.size + reserve > freeBytes())
+    throw new HttpError(507, "Máy chủ không đủ chỗ trống cho file này, báo quản trị viên dọn ổ đĩa");
   const u = await prisma.upload.create({
     data: {
       userId: me.id,
