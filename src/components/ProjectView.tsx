@@ -48,7 +48,7 @@ export function ProjectView({
   assets: AssetDTO[];
   trash: boolean;
   trashCount: number;
-  /** Link thư mục Google Drive đang xem (chỉ nhân viên) */
+  /** Link thư mục Google Drive đang xem (chỉ quản trị viên) */
   driveFolderUrl?: string | null;
 }) {
   const uploads = useUploads();

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requirePageUser } from "@/lib/auth";
+import { isAdmin, requirePageUser } from "@/lib/auth";
 import { can, projectRole } from "@/lib/access";
 import { getAsset, listAssets, versionDTO } from "@/lib/assets";
 import { ReviewView } from "@/components/review/ReviewView";
@@ -36,9 +36,9 @@ export default async function AssetPage({
     if (c && c.assetId === assetId && !(c.internal && user.role === "CLIENT")) initialVersionId = c.versionId;
   }
 
-  // Link Google Drive cho nhân viên (khách không nhận được)
+  // Link Google Drive: chỉ quản trị viên (Owner/Admin) thấy
   const driveLinks =
-    user.role === "CLIENT"
+    !isAdmin(user)
       ? null
       : {
           folder: (folder?.driveFolderId ?? project.driveFolderId)

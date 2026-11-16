@@ -119,7 +119,7 @@ export function ReviewView({
   initialCommentId?: string | null;
   /** Khách xem qua link chia sẻ */
   guest?: GuestCtx | null;
-  /** Link Google Drive (chỉ nhân viên): thư mục chứa file và từng phiên bản */
+  /** Link Google Drive (chỉ quản trị viên): thư mục chứa file và từng phiên bản */
   drive?: DriveLinks | null;
 }) {
   const router = useRouter();
