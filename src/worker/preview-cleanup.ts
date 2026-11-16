@@ -40,6 +40,7 @@ async function candidates(): Promise<Row[]> {
       AND v."proxyKey" IS NOT NULL
       AND v."driveFileId" IS NOT NULL
       AND v."previewPurgedAt" IS NULL
+      AND v."proxyDriveId" IS NULL
     ORDER BY current ASC, seen ASC`;
 }
 

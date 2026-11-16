@@ -1,7 +1,7 @@
 # Kết nối Google Drive (lưu file gốc)
 
 App tự đẩy **file gốc** lên thư mục Drive của công ty, mỗi project một thư mục, thư mục con giống trong app.
-Bản xem nhẹ và thumbnail vẫn nằm trên VPS để phát nhanh.
+Bản xem video/audio (tối đa 2K) cũng nằm trên Drive, trong thư mục `_Bản xem (Smee Review)`; VPS chỉ giữ thumbnail. Xem docs/don-o-dia.md.
 
 Thư mục gốc đã chọn: `https://drive.google.com/drive/folders/1RrmAoaGS5ufRVFKcBR4SE2RO1Q84dwGU`
 

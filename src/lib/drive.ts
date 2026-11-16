@@ -241,10 +241,16 @@ export async function uploadFile(
 
 /** Tải file từ Drive (hỗ trợ Range để tua video / tải tiếp). */
 export async function download(fileId: string, range?: string | null): Promise<Response> {
-  const token = await accessToken();
-  return fetch(`${API}/files/${fileId}?alt=media&${ALL}`, {
-    headers: { Authorization: `Bearer ${token}`, ...(range ? { Range: range } : {}) },
-  });
+  const get = async () =>
+    fetch(`${API}/files/${fileId}?alt=media&${ALL}`, {
+      headers: { Authorization: `Bearer ${await accessToken()}`, ...(range ? { Range: range } : {}) },
+    });
+  const r = await get();
+  if (r.status !== 401) return r;
+  // token hết hạn sớm → lấy token mới, thử lại 1 lần
+  void r.body?.cancel().catch(() => {});
+  cached = null;
+  return get();
 }
 
 export async function checkConnection(): Promise<{ ok: boolean; name?: string; error?: string }> {

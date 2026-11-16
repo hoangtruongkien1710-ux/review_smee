@@ -1,11 +1,21 @@
-# Tự dọn bản xem trên ổ VPS
+# Bản xem và ổ đĩa VPS
 
-Mỗi video/audio upload lên có 2 bản:
+Mỗi video/audio upload lên có 2 bản, **cả hai đều nằm trên Google Drive**:
 
-- **File gốc**: đẩy lên Google Drive xong thì xoá khỏi VPS (không tốn ổ VPS).
-- **Bản xem** (proxy mp4/m4a để phát trên web): nằm trên ổ VPS, chiếm nhiều dung lượng nhất.
+- **File gốc**: trong thư mục project trên Drive.
+- **Bản xem** (mp4 tối đa 2K / m4a để phát trên web): trong thư mục `_Bản xem (Smee Review)` ở thư mục gốc Drive.
+  Khi có người xem, VPS lấy từng đoạn từ Drive và chuyển tiếp (hỗ trợ tua), không lưu lại.
 
-Worker tự dọn bản xem mỗi 30 phút theo các quy tắc:
+VPS chỉ giữ thumbnail, ảnh tua nhanh, sóng âm và bản xem ảnh/PDF (nhỏ). File gốc và bản xem chỉ nằm tạm
+trên VPS vài phút lúc xử lý, đẩy lên Drive xong là xoá. Bản xem cũ đang nằm trên VPS được worker đẩy dần lên
+Drive (bản 4K được nén lại 2K trước). Tắt: `PREVIEW_ON_DRIVE=off`.
+
+Xoá vĩnh viễn file/phiên bản/project trong app thì bản xem trên Drive vào thùng rác Drive.
+
+## Dọn bản xem còn nằm trên VPS
+
+Chỉ áp dụng cho bản xem **chưa** lên Drive (Drive lỗi, hoặc `PREVIEW_ON_DRIVE=off`).
+Worker tự dọn mỗi 30 phút theo các quy tắc:
 
 | Trường hợp | Khi nào dọn |
 |---|---|

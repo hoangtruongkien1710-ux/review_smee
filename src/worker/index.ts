@@ -173,13 +173,103 @@ async function processVersion(id: string) {
     removeQuiet(work);
   }
   const restored = v.previewPurgedAt ? { previewPurgedAt: null, lastViewedAt: new Date() } : {};
-  await prisma.version.update({ where: { id }, data: { ...data, ...restored, processingStatus: "READY", progress: 100 } });
+  // xử lý lại file đã có bản xem trên Drive: bản mới nằm trên VPS, bản cũ trên Drive bỏ đi
+  const oldProxy = v.proxyDriveId && data.proxyKey ? v.proxyDriveId : null;
+  await prisma.version.update({
+    where: { id },
+    data: { ...data, ...restored, ...(oldProxy ? { proxyDriveId: null } : {}), processingStatus: "READY", progress: 100 },
+  });
+  if (oldProxy) void drive.remove(oldProxy).catch(() => {});
   log(`xong ${v.kind} ${v.originalName}${v.previewPurgedAt ? " (tạo lại bản xem)" : ""}`);
   if (fromDrive) {
     // file gốc đã có trên Drive: bản vừa tải về chỉ dùng tạm
     if (KEEP_ORIGINALS) await prisma.version.update({ where: { id }, data: { originalKey: rel(input) } });
     else removeQuiet(path.dirname(input));
   } else await pushToDrive(id);
+  await pushProxy(id);
+}
+
+/* ---------- bản xem video/audio trên Google Drive ---------- */
+
+const PROXY_FOLDER_NAME = "_Bản xem (Smee Review)";
+const PROXY_KINDS = ["VIDEO", "AUDIO"];
+const proxyOnDrive = () => drive.driveEnabled() && process.env.PREVIEW_ON_DRIVE !== "off";
+const proxyBusy = new Set<string>();
+let proxyFolderId: string | null = null;
+
+/** Thư mục chứa bản xem trên Drive (nằm trong thư mục gốc, cạnh các thư mục project). */
+async function proxyFolder() {
+  if (proxyFolderId) return proxyFolderId;
+  const key = "drive_proxy_folder";
+  const s = await prisma.setting.findUnique({ where: { key } });
+  if (s && typeof s.value === "string") return (proxyFolderId = s.value);
+  const id = await drive.ensureFolder(PROXY_FOLDER_NAME, drive.driveRoot());
+  await prisma.setting.upsert({ where: { key }, create: { key, value: id }, update: { value: id } });
+  return (proxyFolderId = id);
+}
+
+/** Đẩy bản xem video/audio lên Drive rồi xoá bản trên VPS. Bản xem cũ lớn hơn 2K được nén lại trước. */
+async function pushProxy(id: string) {
+  if (!proxyOnDrive() || proxyBusy.has(id)) return;
+  proxyBusy.add(id);
+  let tmp: string | null = null;
+  try {
+    const v = await prisma.version.findUnique({ where: { id } });
+    if (!v?.proxyKey || v.proxyDriveId || v.processingStatus !== "READY" || !PROXY_KINDS.includes(v.kind)) return;
+    const file = abs(v.proxyKey);
+    if (!fs.existsSync(file)) return;
+    let upload = file;
+    if (v.kind === "VIDEO") {
+      const info = await m.probe(file);
+      if (Math.max(info.width ?? 0, info.height ?? 0) > m.proxyMax()) {
+        tmp = path.join(dirs.tmp, `${id}-proxy.mp4`);
+        await m.videoProxy(file, tmp, info, () => {});
+        upload = tmp;
+      }
+    }
+    const ext = extOf(v.proxyKey) || "mp4";
+    const base = v.originalName.replace(/\.[^.]+$/, "");
+    const fileId = await drive.uploadFile(upload, `${base}_${id}.${ext}`, ext === "m4a" ? "audio/mp4" : "video/mp4", await proxyFolder());
+    // trong lúc đẩy mà file bị xử lý lại / xoá → bỏ bản vừa đẩy
+    const n = await prisma.version.updateMany({ where: { id, proxyKey: v.proxyKey, proxyDriveId: null }, data: { proxyDriveId: fileId } });
+    if (!n.count) {
+      await drive.remove(fileId).catch(() => {});
+      return;
+    }
+    removeQuiet(file);
+    log(`đã đẩy bản xem lên Drive: ${v.originalName}${tmp ? " (nén lại 2K)" : ""}`);
+  } catch (e) {
+    const msg = (e as Error).message;
+    // thư mục bản xem bị xoá trên Drive → lần sau tạo lại
+    if (/404|notFound/i.test(msg)) {
+      proxyFolderId = null;
+      await prisma.setting.delete({ where: { key: "drive_proxy_folder" } }).catch(() => {});
+    }
+    log(`đẩy bản xem lên Drive lỗi (sẽ thử lại sau): ${msg}`);
+  } finally {
+    if (tmp) removeQuiet(tmp);
+    proxyBusy.delete(id);
+  }
+}
+
+/** Bản xem còn trên VPS (file cũ, hoặc lần đẩy trước lỗi) → đẩy dần lên Drive, mỗi lượt tối đa 20 file. */
+let proxyBackfillRunning = false;
+async function backfillProxies() {
+  if (!proxyOnDrive() || proxyBackfillRunning) return;
+  proxyBackfillRunning = true;
+  try {
+    const rows = await prisma.version.findMany({
+      where: { kind: { in: ["VIDEO", "AUDIO"] }, processingStatus: "READY", proxyKey: { not: null }, proxyDriveId: null },
+      select: { id: true, proxyKey: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    for (const r of rows) if (r.proxyKey && fs.existsSync(abs(r.proxyKey))) await pushProxy(r.id);
+  } catch (e) {
+    log("đẩy dần bản xem lỗi:", (e as Error).message);
+  } finally {
+    proxyBackfillRunning = false;
+  }
 }
 
 /** Đẩy file gốc lên Google Drive, xong thì xoá bản trên VPS. */
@@ -254,6 +344,7 @@ async function backfillSheets() {
 async function housekeeping() {
   try {
     await backfillSheets();
+    void backfillProxies();
     if (drive.driveEnabled()) {
       const pending = await prisma.version.findMany({
         where: { processingStatus: "READY", driveFileId: null, originalKey: { not: null } },
