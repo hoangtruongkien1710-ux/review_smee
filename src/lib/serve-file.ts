@@ -33,6 +33,18 @@ const MIME: Record<string, string> = {
   json: "application/json",
 };
 
+/** Loại file được phép mở thẳng trong trình duyệt. HTML, SVG, JS... luôn bị tải về để không chạy được mã độc trên tên miền app. */
+function safeInlineMime(mime: string) {
+  const m = mime.toLowerCase().split(";")[0].trim();
+  return (/^(image|video|audio)\//.test(m) && !m.includes("svg")) || m === "application/pdf";
+}
+
+/** Header chặn trình duyệt chạy mã trong file người dùng upload. */
+const SAFE_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'",
+};
+
 export function contentDisposition(kind: "inline" | "attachment", name: string) {
   const ascii = name.normalize("NFD").replace(/[^\x20-\x7e]/g, "").replace(/"/g, "") || "file";
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
@@ -51,6 +63,7 @@ function sendFile(req: Request, file: string, mime: string, extra: Record<string
     "Content-Type": mime,
     "Accept-Ranges": "bytes",
     "Cache-Control": "private, max-age=86400",
+    ...SAFE_HEADERS,
     ...extra,
   };
   const range = req.headers.get("range");
@@ -75,9 +88,12 @@ function sendFile(req: Request, file: string, mime: string, extra: Record<string
 export async function serveVersionFile(req: Request, v: V, type: string, opts: { allowOriginal?: boolean } = {}) {
   if (type === "original") {
     if (opts.allowOriginal === false) throw new HttpError(403, "Link này không cho tải file gốc");
-    const disp = contentDisposition(new URL(req.url).searchParams.get("inline") ? "inline" : "attachment", v.originalName);
+    const inline = !!new URL(req.url).searchParams.get("inline") && safeInlineMime(v.mimeType || "");
+    const disp = contentDisposition(inline ? "inline" : "attachment", v.originalName);
+    // file không được phép mở trong trình duyệt: gửi dạng octet-stream để trình duyệt chỉ tải về
+    const mime = inline ? v.mimeType : "application/octet-stream";
     if (v.originalKey && fs.existsSync(abs(v.originalKey)))
-      return sendFile(req, abs(v.originalKey), v.mimeType || "application/octet-stream", { "Content-Disposition": disp });
+      return sendFile(req, abs(v.originalKey), mime, { "Content-Disposition": disp });
     if (v.driveFileId) {
       const r = await drive.download(v.driveFileId, req.headers.get("range"));
       if (!r.ok && r.status !== 206) throw new HttpError(502, "Không tải được file gốc từ Google Drive");
@@ -86,8 +102,9 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
         const val = r.headers.get(k);
         if (val) h.set(k, val);
       }
-      h.set("Content-Type", v.mimeType || "application/octet-stream");
+      h.set("Content-Type", mime);
       h.set("Content-Disposition", disp);
+      for (const [k, val] of Object.entries(SAFE_HEADERS)) h.set(k, val);
       return new Response(r.body, { status: r.status, headers: h });
     }
     throw new HttpError(404, "File gốc không còn");

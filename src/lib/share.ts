@@ -123,12 +123,22 @@ export async function requireSharedAsset(share: ShareRow, assetId: string) {
   return a;
 }
 
+const unlockFails = new Map<string, { n: number; until: number }>();
+
 /** Nhập mật khẩu đúng → đặt cookie mở khoá (30 ngày). */
 export async function unlockShare(token: string, password: string) {
   const share = await findShare(token);
   if (!share || share.disabled) throw new HttpError(404, "Link không tồn tại hoặc đã bị tắt");
   if (!share.passwordHash) return;
-  if (!verifyPassword(password, share.passwordHash)) throw new HttpError(403, "Mật khẩu không đúng");
+  // chống dò mật khẩu: tối đa 10 lần sai / 15 phút cho mỗi link
+  const f = unlockFails.get(token);
+  if (f && f.n >= 10 && f.until > Date.now()) throw new HttpError(429, "Sai quá nhiều lần, thử lại sau 15 phút");
+  if (!verifyPassword(password, share.passwordHash)) {
+    const cur = f && f.until > Date.now() ? f : { n: 0, until: Date.now() + 15 * 60_000 };
+    unlockFails.set(token, { n: cur.n + 1, until: cur.until });
+    throw new HttpError(403, "Mật khẩu không đúng");
+  }
+  unlockFails.delete(token);
   const jar = await cookies();
   jar.set(cookieName(token), await sign(token, share.passwordHash), {
     httpOnly: true,
