@@ -27,6 +27,7 @@ import {
   FileDown,
   Share2,
   RefreshCw,
+  HardDrive,
 } from "lucide-react";
 import type { AssetDTO, VersionDTO } from "@/lib/asset-dto";
 import type { CommentDTO, Person, Shape } from "@/lib/comment-dto";
@@ -88,6 +89,8 @@ const isTyping = (e: KeyboardEvent) => {
   return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
 };
 
+export type DriveLinks = { folder: string | null; files: Record<string, string> };
+
 export function ReviewView({
   project,
   folder,
@@ -101,6 +104,7 @@ export function ReviewView({
   initialVersionId,
   initialCommentId,
   guest = null,
+  drive = null,
 }: {
   project: { id: string; name: string };
   folder: { id: string; name: string } | null;
@@ -115,6 +119,8 @@ export function ReviewView({
   initialCommentId?: string | null;
   /** Khách xem qua link chia sẻ */
   guest?: GuestCtx | null;
+  /** Link Google Drive (chỉ nhân viên): thư mục chứa file và từng phiên bản */
+  drive?: DriveLinks | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -868,7 +874,27 @@ export function ReviewView({
       {!guest && (
         <>
           <dt>Google Drive</dt>
-          <dd className={cn(v.onDrive ? "text-ok" : "text-mut")}>{v.onDrive ? t("Đã lưu") : t("Chưa lưu")}</dd>
+          <dd className={cn(v.onDrive ? "text-ok" : "text-mut")}>
+            {drive?.files[v.id] ? (
+              <a className="underline hover:text-fg" href={drive.files[v.id]} target="_blank" rel="noreferrer">
+                {t("Đã lưu")} · {t("Mở file")}
+              </a>
+            ) : v.onDrive ? (
+              t("Đã lưu")
+            ) : (
+              t("Chưa lưu")
+            )}
+          </dd>
+          {drive?.folder && (
+            <>
+              <dt>{t("Thư mục Drive")}</dt>
+              <dd>
+                <a className="text-fg underline" href={drive.folder} target="_blank" rel="noreferrer">
+                  {t("Mở thư mục")}
+                </a>
+              </dd>
+            </>
+          )}
         </>
       )}
     </dl>
@@ -1035,6 +1061,11 @@ export function ReviewView({
         <button className="btn-icon" title={t("Phím tắt (?)")} onClick={() => setHelpOpen(true)}>
           <Keyboard size={17} />
         </button>
+        {v && !guest && drive?.files[v.id] && (
+          <a className="btn-icon" title={t("Mở file gốc trên Google Drive")} href={drive.files[v.id]} target="_blank" rel="noreferrer">
+            <HardDrive size={17} />
+          </a>
+        )}
         {v && canDownload && (
           <a className="btn-outline h-8" href={`${fileBase}/${v.id}/original`}>
             <Download size={15} /> {t("Tải gốc")}

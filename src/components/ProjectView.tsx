@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2 as TrashIcon,
   Share2,
+  HardDrive,
 } from "lucide-react";
 import { AssetBrowser } from "./AssetBrowser";
 import { useUploads } from "./UploadManager";
@@ -37,6 +38,7 @@ export function ProjectView({
   assets,
   trash,
   trashCount,
+  driveFolderUrl = null,
 }: {
   project: { id: string; name: string; description: string; color: string; archived: boolean };
   role: ProjectRole;
@@ -46,6 +48,8 @@ export function ProjectView({
   assets: AssetDTO[];
   trash: boolean;
   trashCount: number;
+  /** Link thư mục Google Drive đang xem (chỉ nhân viên) */
+  driveFolderUrl?: string | null;
 }) {
   const uploads = useUploads();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -260,6 +264,11 @@ export function ProjectView({
               </span>
             ))}
           </nav>
+          {driveFolderUrl && !trash && (
+            <a className="btn-outline" href={driveFolderUrl} target="_blank" rel="noreferrer" title="Mở thư mục chứa file gốc trên Google Drive">
+              <HardDrive size={15} /> Drive
+            </a>
+          )}
           {canEdit && (
             <button className="btn-outline" onClick={() => setShowShares(true)} title="Các link đã chia sẻ cho khách">
               <Share2 size={15} /> Link chia sẻ

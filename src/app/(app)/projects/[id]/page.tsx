@@ -35,8 +35,15 @@ export default async function ProjectPage({
     trash ? { projectId: id, deletedAt: { not: null } } : { projectId: id, folderId: currentFolder, deletedAt: null },
   );
 
+  // Thư mục Drive tương ứng (khách hàng không thấy). Thư mục chưa có file gốc nào thì Drive chưa tạo, dùng thư mục project.
+  const driveFolderId =
+    user.role === "CLIENT"
+      ? null
+      : ((currentFolder && folders.find((f) => f.id === currentFolder)?.driveFolderId) || project.driveFolderId);
+
   return (
     <ProjectView
+      driveFolderUrl={driveFolderId ? `https://drive.google.com/drive/folders/${driveFolderId}` : null}
       project={{ id: project.id, name: project.name, description: project.description, color: project.color, archived: project.archived }}
       role={role}
       folders={folders.map((f) => ({ id: f.id, name: f.name, parentId: f.parentId }))}
