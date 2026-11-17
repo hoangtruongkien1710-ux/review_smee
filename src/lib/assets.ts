@@ -29,7 +29,7 @@ export function versionDTO(v: VRow): VersionDTO {
     status: v.processingStatus,
     progress: v.progress,
     error: v.processingError,
-    hasProxy: !!v.proxyKey,
+    hasProxy: !!v.proxyKey || (v.kind === "VIDEO" && v.originalPlayable),
     purged: !!v.previewPurgedAt && !v.proxyKey,
     hasThumb: !!v.thumbKey,
     spriteCols: v.spriteKey ? v.spriteCols : null,

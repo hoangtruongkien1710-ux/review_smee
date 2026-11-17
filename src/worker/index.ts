@@ -75,6 +75,7 @@ async function processVersion(id: string) {
   fs.mkdirSync(work, { recursive: true });
   const data: Record<string, unknown> = {};
   const ext = extOf(v.originalName);
+  let spriteJob: { src: string; dur: number } | null = null;
 
   try {
     switch (v.kind) {
@@ -82,16 +83,24 @@ async function processVersion(id: string) {
         const info = await m.probe(input);
         Object.assign(data, { durationSec: info.duration, fps: info.fps, width: info.width, height: info.height });
         if (!info.hasVideo) throw new Error("File không có hình (có thể là file audio)");
-        const proxy = path.join(out, "proxy.mp4");
-        await m.videoProxy(input, proxy, info, (p) => setProgress(id, p * 0.9));
-        const dur = info.duration ?? (await m.probe(proxy)).duration ?? 0;
-        await m.frameAt(proxy, Math.min(dur * 0.1, 3), path.join(out, "thumb.jpg"));
-        data.proxyKey = rel(proxy);
-        data.thumbKey = rel(path.join(out, "thumb.jpg"));
-        if (dur > 0) {
-          const s = await m.sprite(proxy, dur, path.join(out, "sprite.jpg"));
-          Object.assign(data, { spriteKey: rel(path.join(out, "sprite.jpg")), spriteCols: s.cols, spriteCount: s.count });
+        data.originalPlayable = m.browserPlayable(info, ext);
+        // ghi sớm: file gốc phát được thì người dùng xem/comment ngay trong lúc chờ nén
+        await prisma.version.update({ where: { id }, data: { ...data } }).catch(() => {});
+        let src = input;
+        if (m.canSkipProxy(info, ext, Number(v.size))) {
+          // mp4 H.264 đến 2K (hoặc 4K nhẹ): dùng luôn file gốc làm bản xem, không nén lại
+          data.proxyKey = null;
+        } else {
+          const proxy = path.join(out, "proxy.mp4");
+          await m.videoProxy(input, proxy, info, (p) => setProgress(id, p * 0.95));
+          data.proxyKey = rel(proxy);
+          src = proxy;
         }
+        const dur = info.duration ?? (await m.probe(src)).duration ?? 0;
+        await m.frameAt(src, Math.min(dur * 0.1, 3), path.join(out, "thumb.jpg"));
+        data.thumbKey = rel(path.join(out, "thumb.jpg"));
+        // ảnh tua làm sau khi đã xem được (xem cuối processVersion)
+        if (dur > 0) spriteJob = { src, dur };
         break;
       }
       case "AUDIO": {
@@ -174,13 +183,21 @@ async function processVersion(id: string) {
   }
   const restored = v.previewPurgedAt ? { previewPurgedAt: null, lastViewedAt: new Date() } : {};
   // xử lý lại file đã có bản xem trên Drive: bản mới nằm trên VPS, bản cũ trên Drive bỏ đi
-  const oldProxy = v.proxyDriveId && data.proxyKey ? v.proxyDriveId : null;
+  const oldProxy = v.proxyDriveId && "proxyKey" in data ? v.proxyDriveId : null;
   await prisma.version.update({
     where: { id },
     data: { ...data, ...restored, ...(oldProxy ? { proxyDriveId: null } : {}), processingStatus: "READY", progress: 100 },
   });
   if (oldProxy) void drive.remove(oldProxy).catch(() => {});
-  log(`xong ${v.kind} ${v.originalName}${v.previewPurgedAt ? " (tạo lại bản xem)" : ""}`);
+  log(`xong ${v.kind} ${v.originalName}${v.previewPurgedAt ? " (tạo lại bản xem)" : ""}${v.kind === "VIDEO" && !data.proxyKey ? " (dùng luôn file gốc)" : ""}`);
+  if (spriteJob) {
+    // ảnh tua khi rê chuột trên thanh thời gian: làm sau cùng, video đã xem được rồi
+    const sp = path.join(out, "sprite.jpg");
+    await m
+      .sprite(spriteJob.src, spriteJob.dur, sp)
+      .then((s) => prisma.version.update({ where: { id }, data: { spriteKey: rel(sp), spriteCols: s.cols, spriteCount: s.count } }))
+      .catch((e) => log(`không tạo được ảnh tua: ${(e as Error).message}`));
+  }
   if (fromDrive) {
     // file gốc đã có trên Drive: bản vừa tải về chỉ dùng tạm
     if (KEEP_ORIGINALS) await prisma.version.update({ where: { id }, data: { originalKey: rel(input) } });

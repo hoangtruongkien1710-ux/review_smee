@@ -33,13 +33,25 @@ export function run(
   });
 }
 
-export type Probe = { duration: number | null; fps: number | null; width: number | null; height: number | null; hasVideo: boolean; hasAudio: boolean };
+export type Probe = {
+  duration: number | null;
+  fps: number | null;
+  width: number | null;
+  height: number | null;
+  hasVideo: boolean;
+  hasAudio: boolean;
+  vcodec?: string;
+  pixFmt?: string;
+  acodec?: string;
+  /** bit/giây của cả file */
+  bitrate?: number | null;
+};
 
 export async function probe(file: string): Promise<Probe> {
   const { stdout } = await run("ffprobe", ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", file]);
   const j = JSON.parse(stdout) as {
-    format?: { duration?: string };
-    streams?: { codec_type: string; width?: number; height?: number; r_frame_rate?: string; avg_frame_rate?: string; duration?: string; disposition?: { attached_pic?: number } }[];
+    format?: { duration?: string; bit_rate?: string };
+    streams?: { codec_type: string; codec_name?: string; pix_fmt?: string; width?: number; height?: number; r_frame_rate?: string; avg_frame_rate?: string; duration?: string; disposition?: { attached_pic?: number } }[];
   };
   const v = j.streams?.find((s) => s.codec_type === "video" && !s.disposition?.attached_pic);
   const a = j.streams?.find((s) => s.codec_type === "audio");
@@ -58,7 +70,31 @@ export async function probe(file: string): Promise<Probe> {
     height: v?.height ?? null,
     hasVideo: !!v,
     hasAudio: !!a,
+    vcodec: v?.codec_name,
+    pixFmt: v?.pix_fmt,
+    acodec: a?.codec_name,
+    bitrate: Number(j.format?.bit_rate) || null,
   };
+}
+
+/** File gốc phát thẳng được trên mọi trình duyệt: H.264 8-bit 4:2:0, tiếng AAC/MP3 (hoặc không có tiếng), đuôi mp4/m4v/mov. */
+export function browserPlayable(p: Probe, ext: string) {
+  return (
+    p.hasVideo &&
+    ["mp4", "m4v", "mov"].includes(ext) &&
+    p.vcodec === "h264" &&
+    ["yuv420p", "yuvj420p"].includes(p.pixFmt ?? "") &&
+    (!p.hasAudio || ["aac", "mp3"].includes(p.acodec ?? ""))
+  );
+}
+
+/** Dùng luôn file gốc làm bản xem (không nén lại): phát thẳng được, và không quá 2K hoặc nhẹ (dưới SKIP_PROXY_MAX_MBPS, mặc định 25 Mbps). */
+export function canSkipProxy(p: Probe, ext: string, sizeBytes: number) {
+  if (process.env.SKIP_PROXY === "off" || !browserPlayable(p, ext)) return false;
+  const long = Math.max(p.width ?? 0, p.height ?? 0);
+  const bps = p.bitrate ?? (p.duration ? (sizeBytes * 8) / p.duration : Infinity);
+  const maxBps = (Number(process.env.SKIP_PROXY_MAX_MBPS) || 25) * 1e6;
+  return long <= proxyMax() || bps <= maxBps;
 }
 
 /** Cạnh dài tối đa của bản xem video (PROXY_MAX_SIZE, mặc định 2560 = 2K). */
@@ -70,7 +106,7 @@ export async function videoProxy(input: string, out: string, info: Probe, onProg
   const crf = String(Math.min(35, Math.max(14, Number(process.env.PROXY_CRF) || 19)));
   const scale = `scale='if(gte(iw,ih),min(${max},iw),-2)':'if(gte(iw,ih),-2,min(${max},ih))':flags=lanczos,format=yuv420p`;
   const args = ["-y", "-hide_banner", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-vf", scale,
-    "-c:v", "libx264", "-preset", process.env.FFMPEG_PRESET || "veryfast", "-crf", crf, "-profile:v", "high",
+    "-c:v", "libx264", "-preset", process.env.FFMPEG_PRESET || "superfast", "-crf", crf, "-profile:v", "high",
     "-c:a", "aac", "-b:a", "160k", "-ac", "2", "-movflags", "+faststart",
     "-threads", String(process.env.FFMPEG_THREADS || 0), "-progress", "pipe:1", "-nostats", out];
   await run("ffmpeg", args, {

@@ -250,8 +250,12 @@ export function ReviewView({
 
   /* ---------- loại trình xem ---------- */
   const ready = v?.status === "READY";
+  // video mp4 H.264: xem được file gốc ngay trong lúc đang xử lý
+  const early = !ready && v?.kind === "VIDEO" && !!v.hasProxy && (v.status === "QUEUED" || v.status === "PROCESSING");
   const view: "video" | "audio" | "image" | "pages" | "sheet" | "frame" | "none" = !ready
-    ? "none"
+    ? early
+      ? "video"
+      : "none"
     : v?.hasSheet
       ? "sheet"
       : !v?.hasProxy
@@ -270,7 +274,16 @@ export function ReviewView({
 
   /* ---------- media ---------- */
   const [el, setEl] = useState<HTMLMediaElement | null>(null);
+  // video đổi nguồn (file gốc → bản xem) khi xử lý xong: nhớ chỗ đang xem để phát tiếp
+  const resumeRef = useRef<{ t: number; play: boolean } | null>(null);
+  const wasEarly = useRef(false);
   const s = useMedia(el, v?.durationSec ?? null);
+  useEffect(() => {
+    // vừa xử lý xong: trình phát chuyển từ file gốc sang bản xem, phát tiếp từ chỗ đang xem
+    if (wasEarly.current && !early && ready) resumeRef.current = { t: s.t, play: s.playing };
+    wasEarly.current = early;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [early]);
   const tr = useTransport(el, fps);
   const [tcMode, setTcMode] = useLocal<TcMode>("sr_tc_mode", "tc");
   const [inPt, setInPt] = useState<number | null>(null);
@@ -693,7 +706,7 @@ export function ReviewView({
           {t("Xử lý file bị lỗi: {e}", { e: v.error ?? "" })}
         </div>
       );
-    if (v.status !== "READY")
+    if (v.status !== "READY" && !early)
       return (
         <div className="m-auto text-center text-sm text-mut">
           <Loader2 className="mx-auto mb-2 animate-spin text-accent" />
@@ -741,18 +754,31 @@ export function ReviewView({
               <video
                 key={v.id}
                 ref={setEl}
-                src={`${fileBase}/${v.id}/proxy`}
+                src={`${fileBase}/${v.id}/proxy${early ? "?early=1" : ""}`}
                 preload="auto"
                 playsInline
                 className="absolute inset-0 h-full w-full bg-black"
                 onLoadedMetadata={(e) => {
                   const t = e.currentTarget;
                   if (t.videoWidth) setVidSize({ w: t.videoWidth, h: t.videoHeight });
+                  // xử lý xong, chuyển từ file gốc sang bản xem: phát tiếp đúng chỗ đang xem
+                  const r = resumeRef.current;
+                  if (r) {
+                    resumeRef.current = null;
+                    t.currentTime = r.t;
+                    if (r.play) void t.play().catch(() => {});
+                  }
                 }}
                 onClick={() => !drawing && !placingPin && tr.toggle()}
                 onDoubleClick={toggleFullscreen}
               />
               {overlay(box)}
+              {early && (
+                <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-xs text-white">
+                  <Loader2 size={12} className="animate-spin" />
+                  {v.status === "PROCESSING" ? t("Đang tạo bản xem {p}%, đang phát file gốc", { p: v.progress }) : t("Đang chờ tạo bản xem, đang phát file gốc")}
+                </div>
+              )}
             </>
           )}
         </FitBox>

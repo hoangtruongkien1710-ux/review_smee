@@ -91,6 +91,8 @@ export const DICT: Record<string, Row> = {
   "Chất lượng xem": ["Playback quality", "播放画质", "再生画質", "재생 화질", "प्लेबैक गुणवत्ता"],
   "File gốc": ["Original", "原始文件", "元ファイル", "원본", "मूल फ़ाइल"],
   "Bản xem": ["Preview", "预览", "プレビュー", "미리보기", "पूर्वावलोकन"],
+  "Đang tạo bản xem {p}%, đang phát file gốc": ["Creating preview {p}%, playing the original", "正在生成预览 {p}%，正在播放原始文件", "プレビュー作成中 {p}%、元ファイルを再生中", "미리보기 생성 중 {p}%, 원본 재생 중", "पूर्वावलोकन बन रहा है {p}%, मूल फ़ाइल चल रही है"],
+  "Đang chờ tạo bản xem, đang phát file gốc": ["Preview queued, playing the original", "预览排队中，正在播放原始文件", "プレビュー待機中、元ファイルを再生中", "미리보기 대기 중, 원본 재생 중", "पूर्वावलोकन कतार में, मूल फ़ाइल चल रही है"],
   "Đã lưu": ["Saved", "已保存", "保存済み", "저장됨", "सहेजा गया"],
   "Chưa lưu": ["Not saved", "未保存", "未保存", "저장 안 됨", "सहेजा नहीं गया"],
   "File trước": ["Previous file", "上一个文件", "前のファイル", "이전 파일", "पिछली फ़ाइल"],
