@@ -18,6 +18,7 @@ type V = {
   pagesKey: string | null;
   proxyKey: string | null;
   proxyDriveId?: string | null;
+  originalPlayable?: boolean;
   thumbKey: string | null;
   spriteKey: string | null;
   waveformKey: string | null;
@@ -124,6 +125,11 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
 
   const key = { proxy: v.proxyKey, thumb: v.thumbKey, sprite: v.spriteKey, waveform: v.waveformKey, sheet: v.sheetKey ?? null }[type];
   if (key === undefined) throw new HttpError(400, "Loại file không hợp lệ");
+  if (!key && type === "proxy" && v.originalPlayable) {
+    // file gốc mp4 H.264: phát thẳng file gốc (dùng làm bản xem, hoặc tạm trong lúc đang nén)
+    if (v.originalKey && fs.existsSync(abs(v.originalKey))) return sendFile(req, abs(v.originalKey), "video/mp4");
+    if (v.driveFileId) return sendFromDrive(req, v.driveFileId, "video/mp4", {}, "video");
+  }
   if (!key) throw new HttpError(404, "Chưa có bản xem");
   if (type === "proxy" && (!v.lastViewedAt || Date.now() - v.lastViewedAt.getTime() > 3600_000))
     // ghi nhận lần mở để tác vụ dọn ổ đĩa giữ lại file đang được xem

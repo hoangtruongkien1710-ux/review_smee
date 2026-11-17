@@ -3,12 +3,30 @@ import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "./db";
 import { dirs, rel, safeName } from "./storage";
-import { kindOf } from "./kinds";
+import { extOf, kindOf } from "./kinds";
+import { browserPlayable, probe } from "@/worker/media";
 import type { Upload } from "@/generated/prisma/client";
 
 /** Upload xong: tạo file (asset) hoặc phiên bản mới, chuyển file vào kho gốc và xếp hàng chờ xử lý. */
+/** Đọc nhanh thông tin video vừa upload (vài trăm ms): file gốc phát thẳng được thì xem được ngay, không phải chờ nén. */
+async function quickVideoInfo(file: string, fileName: string) {
+  try {
+    const info = await probe(file);
+    return {
+      durationSec: info.duration,
+      fps: info.fps,
+      width: info.width,
+      height: info.height,
+      originalPlayable: browserPlayable(info, extOf(fileName)),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function finalizeUpload(u: Upload, partFile: string) {
   const kind = kindOf(u.fileName, u.mimeType);
+  const early = kind === "VIDEO" ? await quickVideoInfo(partFile, u.fileName) : {};
   const result = await prisma.$transaction(async (tx) => {
     let assetId = u.assetId;
     let versionNo = 1;
@@ -37,6 +55,7 @@ export async function finalizeUpload(u: Upload, partFile: string) {
         size: u.size,
         processingStatus: "QUEUED",
         uploadedById: u.userId,
+        ...early,
       },
     });
     const dir = path.join(dirs.originals, v.id);
