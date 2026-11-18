@@ -18,6 +18,7 @@ import {
   Pencil,
   Trash2,
   MessageSquare,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n, useT } from "../I18n";
@@ -121,8 +122,17 @@ export function MentionInput({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(200, el.scrollHeight) + "px";
+    const fit = () => {
+      // khung comment đang ẩn (popup điện thoại đóng): đo được 0, giữ chiều cao mặc định
+      if (!el.offsetParent) return void (el.style.height = "");
+      el.style.height = "auto";
+      el.style.height = Math.min(200, el.scrollHeight) + "px";
+    };
+    fit();
+    // popup vừa mở ra: đo lại
+    const ro = new ResizeObserver(() => el.style.height === "" && el.offsetParent && fit());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [value, ref]);
 
   return (
@@ -435,6 +445,8 @@ export function CommentPanel({
   onCopyLink,
   composer,
   inputRef,
+  mobileOpen = false,
+  onMobileClose,
 }: {
   comments: CommentDTO[];
   numbers: Map<string, number>;
@@ -455,6 +467,9 @@ export function CommentPanel({
   onCopyLink: (c: CommentDTO) => void;
   composer: ComposerCtx;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  /** Màn hình nhỏ: khung comment là popup, mở/đóng bằng nút Comment nổi. */
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }) {
   const t = useT();
   const [filter, setFilter] = useState<Filter>("all");
@@ -494,7 +509,19 @@ export function CommentPanel({
   ];
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col border-l border-line bg-panel">
+    <aside data-open={mobileOpen} className="comment-drawer flex w-[360px] shrink-0 flex-col border-l border-line bg-panel">
+      <div className="flex justify-center pt-2 lg:hidden phone-land:hidden" aria-hidden>
+        <span className="h-1 w-10 rounded-full bg-line-2" />
+      </div>
+      <div className="flex items-center gap-2 px-3 pt-2 lg:hidden">
+        <MessageSquare size={16} className="text-accent" />
+        <span className="flex-1 text-sm font-semibold">
+          {t("Comment")} <span className="text-dim">{comments.length}</span>
+        </span>
+        <button type="button" className="btn-icon size-9" onClick={onMobileClose} aria-label={t("Đóng")} title={t("Đóng")}>
+          <X size={20} />
+        </button>
+      </div>
       <div className="space-y-2 border-b border-line p-3">
         <div className="flex gap-1">
           {tabs.map(([k, label]) => (

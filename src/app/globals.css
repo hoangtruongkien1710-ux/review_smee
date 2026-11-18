@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* điện thoại xoay ngang (màn hình thấp): ẩn thanh bên/tiêu đề để video chiếm gần hết màn hình */
+@custom-variant phone-land (@media (orientation: landscape) and (max-height: 500px));
+
 @theme {
   --color-bg: #0e0f12;
   --color-panel: #15171c;
@@ -44,3 +47,35 @@ textarea.input { @apply h-auto py-2; }
 select.input { @apply pr-8; }
 @utility label { @apply block text-xs font-medium text-mut mb-1.5; }
 @utility card { @apply rounded-xl border border-line bg-panel; }
+
+/* Khung comment: desktop là cột bên phải; màn hình nhỏ là popup (mở bằng nút Comment nổi). */
+@media (max-width: 1023.98px) {
+  .comment-drawer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    width: auto;
+    height: 78dvh;
+    border-left: 0;
+    border-top: 1px solid var(--color-line-2);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -12px 40px rgb(0 0 0 / 0.5);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .comment-drawer[data-open="false"] { display: none; }
+}
+@media (max-width: 1023.98px) and (orientation: landscape) and (max-height: 500px) {
+  .comment-drawer {
+    left: auto;
+    top: 0;
+    height: 100dvh;
+    width: min(380px, 62vw);
+    border-top: 0;
+    border-left: 1px solid var(--color-line-2);
+    border-radius: 0;
+    box-shadow: -12px 0 40px rgb(0 0 0 / 0.5);
+    padding-right: env(safe-area-inset-right);
+  }
+}

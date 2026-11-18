@@ -308,7 +308,8 @@ export function CompareView({
                 fps={fps}
                 mode={tcMode}
                 onSeek={tr.seek}
-                onScrubStart={tr.pause}
+                onScrubStart={tr.scrubStart}
+                onScrubEnd={tr.scrubEnd}
                 markers={[]}
                 onMarker={() => {}}
                 inPt={inPt}

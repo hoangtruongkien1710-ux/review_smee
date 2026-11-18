@@ -107,6 +107,20 @@ export function useTransport(el: HTMLMediaElement | null, fps: number) {
     el?.pause();
   }, [el, stopShuttle]);
 
+  // Kéo thanh thời gian: tạm dừng trong lúc kéo, thả ra thì phát tiếp nếu trước đó đang phát.
+  const resumeAfterScrub = useRef(false);
+  const scrubStart = useCallback(() => {
+    if (!el) return;
+    stopShuttle();
+    resumeAfterScrub.current = !el.paused && !el.ended;
+    el.pause();
+  }, [el, stopShuttle]);
+  const scrubEnd = useCallback(() => {
+    if (!el || !resumeAfterScrub.current) return;
+    resumeAfterScrub.current = false;
+    void el.play().catch(() => {});
+  }, [el]);
+
   // L: phát tới, bấm thêm để nhanh 2x, 4x. J: lùi (tua ngược mô phỏng), bấm thêm để nhanh hơn. K: dừng.
   const forward = useCallback(() => {
     if (!el) return;
@@ -143,7 +157,7 @@ export function useTransport(el: HTMLMediaElement | null, fps: number) {
   }, [el, stopShuttle]);
 
   useEffect(() => stopShuttle, [stopShuttle]);
-  return { seek, seekFrame, step, toggle, pause, forward, backward, stopShuttle };
+  return { seek, seekFrame, step, toggle, pause, forward, backward, stopShuttle, scrubStart, scrubEnd };
 }
 
 export type Marker = {
@@ -165,6 +179,7 @@ export function Timeline({
   mode,
   onSeek,
   onScrubStart,
+  onScrubEnd,
   markers,
   onMarker,
   inPt,
@@ -180,6 +195,7 @@ export function Timeline({
   mode: TcMode;
   onSeek: (t: number) => void;
   onScrubStart?: () => void;
+  onScrubEnd?: () => void;
   markers: Marker[];
   onMarker: (id: string) => void;
   inPt: number | null;
@@ -196,6 +212,13 @@ export function Timeline({
   const at = (clientX: number) => {
     const r = bar.current!.getBoundingClientRect();
     return Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * D;
+  };
+
+  const endDrag = () => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setHover(null);
+    onScrubEnd?.();
   };
 
   const thumbW = 160;
@@ -231,7 +254,7 @@ export function Timeline({
       </div>
       <div
         ref={bar}
-        className={cn("group relative cursor-pointer", tall ? "h-16" : "h-3")}
+        className={cn("group relative cursor-pointer touch-none", tall ? "h-16" : "h-5 sm:h-3")}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           dragging.current = true;
@@ -243,8 +266,12 @@ export function Timeline({
           setHover(at(e.clientX));
           if (dragging.current) onSeek(at(e.clientX));
         }}
-        onPointerUp={() => (dragging.current = false)}
-        onPointerLeave={() => setHover(null)}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
+        onPointerLeave={(e) => {
+          if (!dragging.current || e.pointerType !== "mouse") setHover(null);
+        }}
       >
         {waveform && waveform.length > 0 ? (
           <Waveform peaks={waveform} progress={t / D} />
@@ -360,7 +387,7 @@ export function Transport({
 }) {
   const t = useT();
   return (
-    <div className="flex items-center gap-1 text-sm">
+    <div className="flex items-center gap-1 text-sm max-sm:gap-0.5">
       <button className="btn-icon" onClick={() => tr.step(-1)} title={t("Lùi 1 khung hình (←)")}>
         <StepBack size={16} />
       </button>
@@ -399,7 +426,7 @@ export function Transport({
       <div className="flex-1" />
       {extra}
 
-      <div className="flex items-center gap-1 rounded-lg px-1">
+      <div className="flex items-center gap-1 rounded-lg px-1 max-sm:hidden">
         <button
           className={cn("btn-icon w-auto px-2 text-xs font-semibold", inPt != null && "text-warn")}
           onClick={setIn}
@@ -420,7 +447,7 @@ export function Transport({
           </button>
         )}
       </div>
-      <button className={cn("btn-icon", loop && "bg-accent/15 text-accent")} onClick={() => setLoop(!loop)} title={t("Lặp lại (đoạn In/Out nếu có)")}>
+      <button className={cn("btn-icon max-sm:hidden", loop && "bg-accent/15 text-accent")} onClick={() => setLoop(!loop)} title={t("Lặp lại (đoạn In/Out nếu có)")}>
         <Repeat size={16} />
       </button>
       <Menu
@@ -445,7 +472,7 @@ export function Transport({
           ))
         }
       </Menu>
-      <div className="group flex items-center">
+      <div className="group flex items-center max-sm:hidden">
         <button className="btn-icon" onClick={() => el && (el.muted = !el.muted)} title={t("Tắt / bật tiếng (M)")}>
           {s.muted || s.volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </button>
