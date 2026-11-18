@@ -22,7 +22,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
   ];
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col items-center border-r border-line bg-panel py-3">
+    <aside className="flex w-14 shrink-0 flex-col items-center border-r border-line bg-panel py-3 phone-land:hidden">
       <Link href="/" className="mb-4" title="Smee Review">
         <Logo size={30} />
       </Link>

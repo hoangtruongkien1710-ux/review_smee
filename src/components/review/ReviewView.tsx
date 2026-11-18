@@ -28,6 +28,7 @@ import {
   Share2,
   RefreshCw,
   HardDrive,
+  MessageSquare,
 } from "lucide-react";
 import type { AssetDTO, VersionDTO } from "@/lib/asset-dto";
 import type { CommentDTO, Person, Shape } from "@/lib/comment-dto";
@@ -285,6 +286,13 @@ export function ReviewView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [early]);
   const tr = useTransport(el, fps);
+  // điện thoại / máy tính bảng: khung comment là popup, mở bằng nút Comment nổi
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const isNarrow = () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023.98px)").matches;
+  const focusComposer = () => {
+    setCommentsOpen(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
   const [tcMode, setTcMode] = useLocal<TcMode>("sr_tc_mode", "tc");
   const [inPt, setInPt] = useState<number | null>(null);
   const [outPt, setOutPt] = useState<number | null>(null);
@@ -293,14 +301,38 @@ export function ReviewView({
   const stageRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
-    const h = () => setFullscreen(document.fullscreenElement === stageRef.current);
+    const h = () => {
+      const fs = document.fullscreenElement === stageRef.current;
+      setFullscreen(fs);
+      // điện thoại: thoát toàn màn hình thì mở khoá xoay màn hình
+      if (!fs) (screen.orientation as ScreenOrientation & { unlock?: () => void })?.unlock?.();
+    };
     document.addEventListener("fullscreenchange", h);
     return () => document.removeEventListener("fullscreenchange", h);
   }, []);
   const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void stageRef.current?.requestFullscreen?.();
-  }, []);
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+      return;
+    }
+    const stage = stageRef.current;
+    if (stage?.requestFullscreen) {
+      void stage
+        .requestFullscreen()
+        .then(() => {
+          // điện thoại: video ngang thì tự xoay ngang khi toàn màn hình (Android hỗ trợ, iPhone bỏ qua)
+          const vid = el as HTMLVideoElement | null;
+          const landscape = !vid?.videoWidth || vid.videoWidth >= vid.videoHeight;
+          const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+          if (landscape && isNarrow() && o?.lock) void o.lock("landscape").catch(() => {});
+        })
+        .catch(() => {});
+      return;
+    }
+    // iPhone Safari không cho toàn màn hình một khung div: dùng trình phát toàn màn hình của iOS
+    const vid = el as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    vid?.webkitEnterFullscreen?.();
+  }, [el]);
 
   // vòng lặp: đoạn In/Out nếu có, không thì cả file
   useEffect(() => {
@@ -383,6 +415,7 @@ export function ReviewView({
       tr.pause();
       setPlacingPin(false);
       setActiveId(null);
+      if (isNarrow()) setCommentsOpen(false); // điện thoại: đóng popup để vẽ lên khung hình
     }
     setDrawingRaw(d);
   };
@@ -534,7 +567,7 @@ export function ReviewView({
       const k = e.key.toLowerCase();
       if (k === "c" && canComment) {
         e.preventDefault();
-        inputRef.current?.focus();
+        focusComposer();
         return;
       }
       if (k === "?") return setHelpOpen((x) => !x);
@@ -647,7 +680,7 @@ export function ReviewView({
       onPlacePin={(x, y) => {
         setPin({ x, y });
         setPlacingPin(false);
-        inputRef.current?.focus();
+        focusComposer();
       }}
       draftPin={pin}
     />
@@ -688,7 +721,7 @@ export function ReviewView({
         className="btn-primary ml-1 h-8 px-2.5 text-xs"
         onClick={() => {
           setDrawingRaw(false);
-          inputRef.current?.focus();
+          focusComposer();
         }}
       >
         <Check size={14} /> Xong
@@ -943,8 +976,8 @@ export function ReviewView({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4">
-        <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm text-mut">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4 max-sm:h-auto max-sm:flex-wrap max-sm:gap-x-1.5 max-sm:gap-y-1 max-sm:px-3 max-sm:py-2 phone-land:hidden">
+        <nav className="flex min-w-0 flex-1 items-center gap-1 text-sm text-mut max-sm:basis-full">
           <Link href={base} className="truncate hover:text-fg">
             {guest ? guest.shareName : project.name}
           </Link>
@@ -1059,7 +1092,7 @@ export function ReviewView({
         />
         )}
         {!guest && v && (
-          <Menu trigger={() => <span className="btn-icon cursor-pointer" title={t("Xuất comment")}><FileDown size={17} /></span>}>
+          <Menu trigger={() => <span className="btn-icon cursor-pointer max-sm:hidden" title={t("Xuất comment")}><FileDown size={17} /></span>}>
             {(close) => (
               <div className="w-64">
                 <p className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-dim">Xuất comment V{v.versionNo}</p>
@@ -1099,7 +1132,7 @@ export function ReviewView({
           {() => infoList}
         </Menu>
         {guest && <LangPicker className="hidden sm:inline-flex" />}
-        <button className="btn-icon" title={t("Phím tắt (?)")} onClick={() => setHelpOpen(true)}>
+        <button className="btn-icon max-lg:hidden" title={t("Phím tắt (?)")} onClick={() => setHelpOpen(true)}>
           <Keyboard size={17} />
         </button>
         {v && !guest && drive?.files[v.id] && (
@@ -1109,7 +1142,7 @@ export function ReviewView({
         )}
         {v && canDownload && (
           <a className="btn-outline h-8" href={`${fileBase}/${v.id}/original`}>
-            <Download size={15} /> {t("Tải gốc")}
+            <Download size={15} /> <span className="max-sm:hidden">{t("Tải gốc")}</span>
           </a>
         )}
       </header>
@@ -1135,7 +1168,22 @@ export function ReviewView({
               {t("Bấm vào vị trí cần ghim comment · Esc để huỷ")}
             </div>
           )}
-          <div className="relative flex min-h-0 min-w-0 flex-1">{stage()}</div>
+          <div className="relative flex min-h-0 min-w-0 flex-1">
+            {stage()}
+            {/* điện thoại / máy tính bảng: nút Comment nổi mở popup comment */}
+            {!fullscreen && !commentsOpen && (
+              <button
+                type="button"
+                onClick={() => setCommentsOpen(true)}
+                className="absolute bottom-3 right-3 z-20 flex h-10 items-center gap-2 rounded-full bg-accent px-4 text-sm font-semibold text-white shadow-lg shadow-black/40 active:scale-95 lg:hidden"
+              >
+                <MessageSquare size={17} />
+                {t("Comment")}
+                {comments.length > 0 && <span className="rounded-full bg-white/25 px-1.5 text-xs tabular-nums">{comments.length}</span>}
+                {(shapes.length > 0 || pin) && <span className="size-2 rounded-full bg-white" title={t("Đang có nét vẽ chưa gửi")} />}
+              </button>
+            )}
+          </div>
 
           {timed && ready && (
             <div className="shrink-0 border-t border-line bg-panel px-3 pb-2 pt-1">
@@ -1147,7 +1195,8 @@ export function ReviewView({
                   fps={fps}
                   mode={tcMode}
                   onSeek={tr.seek}
-                  onScrubStart={tr.pause}
+                  onScrubStart={tr.scrubStart}
+                  onScrubEnd={tr.scrubEnd}
                   markers={markers}
                   onMarker={(id) => {
                     const c = comments.find((x) => x.id === id);
@@ -1186,7 +1235,7 @@ export function ReviewView({
                 extra={
                   view === "video" && vidSize ? (
                     <span
-                      className="mr-1 rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-mut"
+                      className="mr-1 rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-mut max-sm:hidden"
                       title={`${t("Chất lượng xem")}: ${vidSize.w}×${vidSize.h}${v?.width && v.height ? ` · ${t("File gốc")}: ${v.width}×${v.height}` : ""}`}
                     >
                       {qualityLabel(vidSize.w, vidSize.h)}
@@ -1222,7 +1271,10 @@ export function ReviewView({
           )}
         </div>
 
+        {commentsOpen && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setCommentsOpen(false)} />}
         <CommentPanel
+          mobileOpen={commentsOpen}
+          onMobileClose={() => setCommentsOpen(false)}
           comments={sorted}
           numbers={numbers}
           anchorOf={anchorOf}
