@@ -2,8 +2,15 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { shareScope, shareState, touchShare } from "@/lib/share";
 import { getAsset, versionDTO } from "@/lib/assets";
+import { shareMetadata } from "@/lib/share-meta";
+import type { Metadata } from "next";
 import { ShareGate } from "@/components/ShareGate";
 import { ReviewView } from "@/components/review/ReviewView";
+
+export async function generateMetadata({ params }: { params: Promise<{ token: string; assetId: string }> }): Promise<Metadata> {
+  const { token, assetId } = await params;
+  return shareMetadata(token, assetId);
+}
 
 export default async function ShareAssetPage({
   params,

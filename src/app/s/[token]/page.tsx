@@ -4,12 +4,20 @@ import { ChevronRight, Download, Folder } from "lucide-react";
 import type { Prisma } from "@/generated/prisma/client";
 import { shareScope, shareState, touchShare } from "@/lib/share";
 import { listAssets } from "@/lib/assets";
+import { shareMetadata } from "@/lib/share-meta";
+import type { Metadata } from "next";
 import { ShareGate } from "@/components/ShareGate";
 import { AssetThumb } from "@/components/AssetThumb";
 import { StatusPill } from "@/components/StatusPill";
 import { Logo } from "@/components/ui";
 import { LangPicker } from "@/components/I18n";
 import { guestT } from "@/lib/i18n/server";
+
+export async function generateMetadata({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ f?: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const { f } = await searchParams;
+  return shareMetadata(token, undefined, f);
+}
 
 export default async function SharePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ f?: string }> }) {
   const { token } = await params;
