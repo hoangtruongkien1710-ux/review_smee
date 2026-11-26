@@ -821,9 +821,12 @@ export function ReviewView({
               />
               {overlay(box)}
               {early && (
-                <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-xs text-white">
-                  <Loader2 size={12} className="animate-spin" />
-                  {v.status === "PROCESSING" ? t("Đang tạo bản xem {p}%, đang phát file gốc", { p: v.progress }) : t("Đang chờ tạo bản xem, đang phát file gốc")}
+                <div className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-md bg-black/60 px-2 py-1 text-xs text-white">
+                  <div className="flex items-center gap-1.5">
+                    <Loader2 size={12} className="shrink-0 animate-spin" />
+                    {v.status === "PROCESSING" ? t("Đang tạo bản xem {p}%, đang phát file gốc", { p: v.progress }) : t("Đang chờ tạo bản xem, đang phát file gốc")}
+                  </div>
+                  {!guest && <div className="mt-0.5 pl-[18px] text-[11px] text-white/75">{t("Có thể gửi khách hàng xem video lúc đang chờ xử lý")}</div>}
                 </div>
               )}
             </>
