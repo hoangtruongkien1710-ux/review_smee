@@ -286,6 +286,20 @@ export function ReviewView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [early]);
   const tr = useTransport(el, fps);
+  // chất lượng xem: video lớn hơn 1080p có thêm bản 1080p cho mạng yếu. "auto" = 1080p khi trình duyệt báo mạng chậm / tiết kiệm dữ liệu
+  const [qPref, setQPref] = useLocal<"auto" | "high" | "low">("sr_quality", "auto");
+  const [slowNet, setSlowNet] = useState(false);
+  useEffect(() => {
+    const c = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (c) setSlowNet(!!c.saveData || ["slow-2g", "2g", "3g"].includes(c.effectiveType ?? ""));
+  }, []);
+  const useLow = !!v?.hasLow && !early && (qPref === "low" || (qPref === "auto" && slowNet));
+  const changeQuality = (k: "auto" | "high" | "low") => {
+    // đổi chất lượng: nguồn video đổi nên nhớ chỗ đang xem (đọc trước khi đổi) để phát tiếp đúng chỗ
+    const willLow = !!v?.hasLow && !early && (k === "low" || (k === "auto" && slowNet));
+    if (el && willLow !== useLow) resumeRef.current = { t: el.currentTime, play: !el.paused && !el.ended };
+    setQPref(k);
+  };
   // điện thoại / máy tính bảng: khung comment là popup, mở bằng nút Comment nổi
   const [commentsOpen, setCommentsOpen] = useState(false);
   const isNarrow = () => typeof window !== "undefined" && window.matchMedia("(max-width: 1023.98px)").matches;
@@ -787,7 +801,7 @@ export function ReviewView({
               <video
                 key={v.id}
                 ref={setEl}
-                src={`${fileBase}/${v.id}/proxy${early ? "?early=1" : ""}`}
+                src={`${fileBase}/${v.id}/${useLow ? "low" : "proxy"}${early ? "?early=1" : ""}`}
                 preload="auto"
                 playsInline
                 className="absolute inset-0 h-full w-full bg-black"
@@ -1234,12 +1248,50 @@ export function ReviewView({
                 onFullscreen={view === "video" ? toggleFullscreen : undefined}
                 extra={
                   view === "video" && vidSize ? (
-                    <span
-                      className="mr-1 rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-mut max-sm:hidden"
-                      title={`${t("Chất lượng xem")}: ${vidSize.w}×${vidSize.h}${v?.width && v.height ? ` · ${t("File gốc")}: ${v.width}×${v.height}` : ""}`}
-                    >
-                      {qualityLabel(vidSize.w, vidSize.h)}
-                    </span>
+                    v?.hasLow ? (
+                      <Menu
+                        up
+                        trigger={() => (
+                          <span
+                            className="mr-1 cursor-pointer whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-mut hover:text-fg"
+                            title={`${t("Chất lượng xem")}: ${vidSize.w}×${vidSize.h}`}
+                          >
+                            {qualityLabel(vidSize.w, vidSize.h)}
+                            {qPref === "auto" && <span className="text-dim max-sm:hidden"> · {t("Tự động")}</span>}
+                          </span>
+                        )}
+                      >
+                        {(close) => (
+                          <>
+                            <p className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-dim">{t("Chất lượng xem")}</p>
+                            {(
+                              [
+                                ["auto", t("Tự động (1080p khi mạng yếu)")],
+                                ["high", `${t("Cao nhất")}${v.width && v.height ? ` (${qualityLabel(v.width, v.height)})` : ""}`],
+                                ["low", `1080p · ${t("tiết kiệm dữ liệu")}`],
+                              ] as const
+                            ).map(([k, label]) => (
+                              <MenuItem
+                                key={k}
+                                onClick={() => {
+                                  changeQuality(k);
+                                  close();
+                                }}
+                              >
+                                <span className={cn(qPref === k && "text-accent")}>{label}</span>
+                              </MenuItem>
+                            ))}
+                          </>
+                        )}
+                      </Menu>
+                    ) : (
+                      <span
+                        className="mr-1 rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-mut max-sm:hidden"
+                        title={`${t("Chất lượng xem")}: ${vidSize.w}×${vidSize.h}${v?.width && v.height ? ` · ${t("File gốc")}: ${v.width}×${v.height}` : ""}`}
+                      >
+                        {qualityLabel(vidSize.w, vidSize.h)}
+                      </span>
+                    )
                   ) : undefined
                 }
               />

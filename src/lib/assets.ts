@@ -32,6 +32,7 @@ export function versionDTO(v: VRow): VersionDTO {
     hasProxy: !!v.proxyKey || (v.kind === "VIDEO" && v.originalPlayable),
     purged: !!v.previewPurgedAt && !v.proxyKey,
     hasThumb: !!v.thumbKey,
+    hasLow: !!v.lowKey || !!v.lowDriveId,
     spriteCols: v.spriteKey ? v.spriteCols : null,
     spriteCount: v.spriteKey ? v.spriteCount : null,
     hasWaveform: !!v.waveformKey,
