@@ -18,6 +18,8 @@ export type VersionDTO = {
   /** bản xem đã bị dọn để tiết kiệm ổ đĩa, mở lại sẽ tự tạo lại */
   purged: boolean;
   hasThumb: boolean;
+  /** Có thêm bản 1080p cho mạng yếu (video gốc lớn hơn 1080p) */
+  hasLow: boolean;
   spriteCols: number | null;
   spriteCount: number | null;
   hasWaveform: boolean;

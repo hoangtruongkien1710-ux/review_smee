@@ -184,6 +184,8 @@ model Version {
   proxyKey         String? // bản xem (mp4 / mp3 / pdf / ảnh)
   originalPlayable Boolean  @default(false) // file gốc phát thẳng được trên trình duyệt (mp4 H.264): xem ngay khi đang xử lý
   proxyDriveId     String? // bản xem video/audio đã đẩy lên Drive (thư mục _Bản xem); file trên VPS đã xoá
+  lowKey           String? // bản xem 1080p cho mạng yếu (VPS, chỉ khi chưa nối Drive)
+  lowDriveId       String? // bản xem 1080p trên Drive (thư mục _Bản xem)
   thumbKey         String?
   spriteKey        String? // ảnh scrub
   spriteCols       Int?

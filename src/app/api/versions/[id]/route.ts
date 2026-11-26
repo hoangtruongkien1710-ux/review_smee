@@ -53,6 +53,6 @@ export const DELETE = route<Ctx>(async (_req, { params }) => {
     await tx.version.delete({ where: { id: v.id } });
   });
   removeVersionFiles([v]);
-  sync.deleteFiles([v.driveFileId, v.proxyDriveId]);
+  sync.deleteFiles([v.driveFileId, v.proxyDriveId, v.lowDriveId]);
   return { ok: true };
 });

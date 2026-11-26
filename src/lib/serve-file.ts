@@ -18,6 +18,8 @@ type V = {
   pagesKey: string | null;
   proxyKey: string | null;
   proxyDriveId?: string | null;
+  lowKey?: string | null;
+  lowDriveId?: string | null;
   originalPlayable?: boolean;
   thumbKey: string | null;
   spriteKey: string | null;
@@ -123,6 +125,12 @@ export async function serveVersionFile(req: Request, v: V, type: string, opts: {
     return sendFile(req, path.join(abs(v.pagesKey), `${n}.jpg`), "image/jpeg");
   }
 
+  if (type === "low") {
+    // bản 1080p cho mạng yếu: trên VPS hoặc trên Drive; chưa có thì báo 404 để trình phát dùng bản chính
+    if (v.lowKey && fs.existsSync(abs(v.lowKey))) return sendFile(req, abs(v.lowKey), "video/mp4");
+    if (v.lowDriveId) return sendFromDrive(req, v.lowDriveId, "video/mp4", {}, "bản 1080p");
+    throw new HttpError(404, "Chưa có bản 1080p");
+  }
   const key = { proxy: v.proxyKey, thumb: v.thumbKey, sprite: v.spriteKey, waveform: v.waveformKey, sheet: v.sheetKey ?? null }[type];
   if (key === undefined) throw new HttpError(400, "Loại file không hợp lệ");
   if (!key && type === "proxy" && v.originalPlayable) {

@@ -84,6 +84,12 @@ async function processVersion(id: string) {
         Object.assign(data, { durationSec: info.duration, fps: info.fps, width: info.width, height: info.height });
         if (!info.hasVideo) throw new Error("File không có hình (có thể là file audio)");
         data.originalPlayable = m.browserPlayable(info, ext);
+        if (!v.previewPurgedAt) {
+          // xử lý lại từ đầu: bản 1080p cũ bỏ đi, tạo lại sau
+          data.lowKey = null;
+          data.lowDriveId = null;
+          removeQuiet(path.join(out, "low.mp4"));
+        }
         // ghi sớm: file gốc phát được thì người dùng xem/comment ngay trong lúc chờ nén
         await prisma.version.update({ where: { id }, data: { ...data } }).catch(() => {});
         let src = input;
@@ -184,11 +190,13 @@ async function processVersion(id: string) {
   const restored = v.previewPurgedAt ? { previewPurgedAt: null, lastViewedAt: new Date() } : {};
   // xử lý lại file đã có bản xem trên Drive: bản mới nằm trên VPS, bản cũ trên Drive bỏ đi
   const oldProxy = v.proxyDriveId && "proxyKey" in data ? v.proxyDriveId : null;
+  const oldLow = v.lowDriveId && "lowDriveId" in data ? v.lowDriveId : null;
   await prisma.version.update({
     where: { id },
     data: { ...data, ...restored, ...(oldProxy ? { proxyDriveId: null } : {}), processingStatus: "READY", progress: 100 },
   });
   if (oldProxy) void drive.remove(oldProxy).catch(() => {});
+  if (oldLow) void drive.remove(oldLow).catch(() => {});
   log(`xong ${v.kind} ${v.originalName}${v.previewPurgedAt ? " (tạo lại bản xem)" : ""}${v.kind === "VIDEO" && !data.proxyKey ? " (dùng luôn file gốc)" : ""}`);
   if (spriteJob) {
     // ảnh tua khi rê chuột trên thanh thời gian: làm sau cùng, video đã xem được rồi
@@ -198,6 +206,8 @@ async function processVersion(id: string) {
       .then((s) => prisma.version.update({ where: { id }, data: { spriteKey: rel(sp), spriteCols: s.cols, spriteCount: s.count } }))
       .catch((e) => log(`không tạo được ảnh tua: ${(e as Error).message}`));
   }
+  // bản 1080p cho mạng yếu: làm khi file gốc / bản xem còn trên VPS, trước khi đẩy lên Drive
+  if (v.kind === "VIDEO") await makeLow(id);
   if (fromDrive) {
     // file gốc đã có trên Drive: bản vừa tải về chỉ dùng tạm
     if (KEEP_ORIGINALS) await prisma.version.update({ where: { id }, data: { originalKey: rel(input) } });
@@ -266,6 +276,107 @@ async function pushProxy(id: string) {
   } finally {
     if (tmp) removeQuiet(tmp);
     proxyBusy.delete(id);
+  }
+}
+
+/* ---------- bản 1080p cho mạng yếu ---------- */
+
+/** Cạnh dài tối đa của bản mạng yếu (1920 = 1080p). Video gốc không lớn hơn mức này thì không cần bản thứ hai. */
+const LOW_MAX = 1920;
+const lowBusy = new Set<string>();
+const lowFailed = new Set<string>();
+let lowChain: Promise<unknown> = Promise.resolve();
+
+/** Tải một file Drive về đường dẫn tạm. */
+async function downloadDrive(fileId: string, dest: string) {
+  const r = await drive.download(fileId);
+  if (!r.ok || !r.body) throw new Error(`Không tải được file từ Google Drive (${r.status})`);
+  const { pipeline } = await import("node:stream/promises");
+  const { Readable } = await import("node:stream");
+  await pipeline(Readable.fromWeb(r.body as import("node:stream/web").ReadableStream), fs.createWriteStream(dest));
+}
+
+/** Tạo bản 1080p của video (nếu video lớn hơn 1080p). Mỗi lượt chạy một video để không chiếm hết CPU. */
+function makeLow(id: string) {
+  const job = lowChain.then(() => makeLowNow(id));
+  lowChain = job.catch(() => {});
+  return job;
+}
+
+async function makeLowNow(id: string) {
+  if (lowBusy.has(id)) return;
+  lowBusy.add(id);
+  let tmpSrc: string | null = null;
+  let tmpOut: string | null = null;
+  try {
+    const v = await prisma.version.findUnique({ where: { id } });
+    if (!v || v.kind !== "VIDEO" || v.processingStatus !== "READY" || v.lowKey || v.lowDriveId) return;
+    if (Math.max(v.width ?? 0, v.height ?? 0) <= LOW_MAX) return;
+    // nguồn: bản xem hoặc file gốc trên VPS; không còn thì tải từ Drive
+    let src: string | null = null;
+    for (const key of [v.proxyKey, v.originalKey]) if (!src && key && fs.existsSync(abs(key))) src = abs(key);
+    if (!src) {
+      const fid = v.proxyDriveId ?? v.driveFileId;
+      if (!fid || !drive.driveEnabled()) return;
+      const need = Number(v.size) + cleanupConfig().minFreeGb * 0.5 * 1024 ** 3;
+      if (freeBytes() < need) throw new Error("Ổ đĩa VPS không đủ chỗ để tạo bản 1080p");
+      tmpSrc = path.join(dirs.tmp, `${id}-low-src.mp4`);
+      await downloadDrive(fid, tmpSrc);
+      src = tmpSrc;
+    }
+    const info = await m.probe(src);
+    tmpOut = path.join(dirs.tmp, `${id}-low.mp4`);
+    await m.videoProxy(src, tmpOut, info, () => {}, { max: LOW_MAX, crf: Number(process.env.LOW_CRF) || 23 });
+    let patch: { lowKey?: string; lowDriveId?: string };
+    let uploaded: string | null = null;
+    if (proxyOnDrive()) {
+      const base = v.originalName.replace(/\.[^.]+$/, "");
+      uploaded = await drive.uploadFile(tmpOut, `${base}_${id}_1080p.mp4`, "video/mp4", await proxyFolder());
+      patch = { lowDriveId: uploaded };
+    } else {
+      const dest = path.join(mediaDir(id), "low.mp4");
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(tmpOut, dest);
+      patch = { lowKey: rel(dest) };
+    }
+    // trong lúc làm mà file bị xử lý lại / xoá → bỏ bản vừa tạo
+    const n = await prisma.version.updateMany({ where: { id, lowKey: null, lowDriveId: null, processingStatus: "READY" }, data: patch });
+    if (!n.count && uploaded) await drive.remove(uploaded).catch(() => {});
+    else log(`đã tạo bản 1080p: ${v.originalName}`);
+  } catch (e) {
+    lowFailed.add(id);
+    log(`tạo bản 1080p lỗi (${id}): ${(e as Error).message}`);
+  } finally {
+    if (tmpSrc) removeQuiet(tmpSrc);
+    if (tmpOut) removeQuiet(tmpOut);
+    lowBusy.delete(id);
+  }
+}
+
+/** Video lớn upload trước khi có bản 1080p → tạo dần (mỗi lượt vài file). */
+let lowBackfillRunning = false;
+async function backfillLow() {
+  if (lowBackfillRunning) return;
+  lowBackfillRunning = true;
+  try {
+    const rows = await prisma.version.findMany({
+      where: {
+        kind: "VIDEO",
+        processingStatus: "READY",
+        lowKey: null,
+        lowDriveId: null,
+        OR: [{ width: { gt: LOW_MAX } }, { height: { gt: LOW_MAX } }],
+        id: { notIn: [...lowFailed] },
+      },
+      select: { id: true },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    });
+    for (const r of rows) await makeLow(r.id);
+  } catch (e) {
+    log("tạo dần bản 1080p lỗi:", (e as Error).message);
+  } finally {
+    lowBackfillRunning = false;
   }
 }
 
@@ -362,6 +473,7 @@ async function housekeeping() {
   try {
     await backfillSheets();
     void backfillProxies();
+    void backfillLow();
     if (drive.driveEnabled()) {
       const pending = await prisma.version.findMany({
         where: { processingStatus: "READY", driveFileId: null, originalKey: { not: null } },

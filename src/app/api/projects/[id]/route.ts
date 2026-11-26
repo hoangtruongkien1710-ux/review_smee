@@ -31,10 +31,10 @@ export const DELETE = route<Ctx>(async (_req, { params }) => {
   // File gốc trên Drive được giữ lại (an toàn); bản xem trên Drive vào thùng rác Drive; file trên VPS xoá ngay.
   const versions = await prisma.version.findMany({
     where: { asset: { projectId: id } },
-    select: { id: true, originalKey: true, proxyDriveId: true },
+    select: { id: true, originalKey: true, proxyDriveId: true, lowDriveId: true },
   });
   await prisma.project.delete({ where: { id } });
   removeVersionFiles(versions);
-  sync.deleteFiles(versions.map((v) => v.proxyDriveId));
+  sync.deleteFiles(versions.flatMap((v) => [v.proxyDriveId, v.lowDriveId]));
   return { ok: true };
 });
