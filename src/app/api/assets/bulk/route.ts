@@ -6,12 +6,15 @@ import { requireProject } from "@/lib/access";
 import { STATUSES } from "@/lib/statuses";
 import { sync } from "@/lib/drive-sync";
 import { removeVersionFiles } from "@/lib/files";
+import { moveAssetsToProject } from "@/lib/move";
 
 const Body = z.object({
   projectId: z.string(),
   ids: z.array(z.string()).min(1).max(500),
   action: z.enum(["trash", "restore", "delete", "move", "status"]),
   folderId: z.string().nullable().optional(),
+  /** Chuyển sang project khác (chỉ dùng với action "move") */
+  toProjectId: z.string().optional(),
   status: z.enum(STATUSES.map((s) => s.key) as [string, ...string[]]).optional(),
 });
 
@@ -53,6 +56,12 @@ export const POST = route(async (req) => {
       break;
     }
     case "move": {
+      if (b.toProjectId && b.toProjectId !== b.projectId) {
+        await requireProject(me, b.toProjectId, "EDITOR");
+        await moveAssetsToProject(ids, b.toProjectId, b.folderId ?? null);
+        await prisma.project.updateMany({ where: { id: { in: [b.projectId, b.toProjectId] } }, data: { updatedAt: now } });
+        return { ok: true, count: ids.length };
+      }
       if (b.folderId && !(await prisma.folder.findFirst({ where: { id: b.folderId, projectId: b.projectId } })))
         throw new HttpError(400, "Thư mục đích không tồn tại");
       await prisma.asset.updateMany({ where: { id: { in: ids } }, data: { folderId: b.folderId ?? null } });
