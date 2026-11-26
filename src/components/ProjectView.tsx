@@ -17,6 +17,7 @@ import {
   Trash2 as TrashIcon,
   Share2,
   HardDrive,
+  FolderInput,
 } from "lucide-react";
 import { AssetBrowser } from "./AssetBrowser";
 import { useUploads } from "./UploadManager";
@@ -24,6 +25,7 @@ import type { AssetDTO } from "@/lib/asset-dto";
 import { Avatar, Menu, MenuItem, Modal, api, useConfirm, useToast } from "./ui";
 import { MembersModal, type Member } from "./MembersModal";
 import { ShareModal } from "./ShareModal";
+import { MoveModal } from "./MoveModal";
 import { cn } from "@/lib/utils";
 
 type ProjectRole = "MANAGER" | "EDITOR" | "COMMENTER" | "VIEWER";
@@ -63,6 +65,7 @@ export function ProjectView({
   const [showMembers, setShowMembers] = useState(false);
   const [showShares, setShowShares] = useState(false);
   const [shareFolder, setShareFolder] = useState<F | null>(null);
+  const [moveFolder, setMoveFolder] = useState<F | null>(null);
 
   const byParent = useMemo(() => {
     const m = new Map<string | null, F[]>();
@@ -133,6 +136,9 @@ export function ProjectView({
             </MenuItem>
             <MenuItem icon={<Pencil size={15} />} onClick={() => (close(), setFolderModal({ mode: "rename", folder: f }))}>
               Đổi tên
+            </MenuItem>
+            <MenuItem icon={<FolderInput size={15} />} onClick={() => (close(), setMoveFolder(f))}>
+              Di chuyển thư mục
             </MenuItem>
             <MenuItem icon={<Share2 size={15} />} onClick={() => (close(), setShareFolder(f))}>
               Chia sẻ thư mục cho khách
@@ -383,6 +389,26 @@ export function ProjectView({
         projectId={project.id}
         assets={[]}
         folders={shareFolder ? [{ id: shareFolder.id, name: shareFolder.name }] : []}
+      />
+      <MoveModal
+        open={!!moveFolder}
+        title={`Di chuyển thư mục "${moveFolder?.name ?? ""}" tới…`}
+        currentProjectId={project.id}
+        excludeFolderId={moveFolder?.id ?? null}
+        onClose={() => setMoveFolder(null)}
+        onMove={async (t) => {
+          const f = moveFolder!;
+          setMoveFolder(null);
+          try {
+            await api(`/api/folders/${f.id}`, { method: "PATCH", body: { parentId: t.folderId, ...(t.projectId !== project.id ? { projectId: t.projectId } : {}) } });
+            toast(t.projectId !== project.id ? `Đã chuyển thư mục sang "${t.projectName}"` : "Đã di chuyển thư mục");
+            // đang đứng trong thư mục vừa chuyển sang project khác: về gốc project hiện tại
+            if (t.projectId !== project.id && path.some((p) => p.id === f.id)) router.push(href(null));
+            router.refresh();
+          } catch (e) {
+            toast((e as Error).message, "err");
+          }
+        }}
       />
       <MembersModal open={showMembers} onClose={() => setShowMembers(false)} projectId={project.id} members={members} canManage={role === "MANAGER"} />
       {confirmNode}

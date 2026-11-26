@@ -28,6 +28,7 @@ import { Menu, MenuItem, Modal, api, useConfirm, useToast } from "./ui";
 import { AssetThumb, KindIcon, formatDuration } from "./AssetThumb";
 import { StatusPill } from "./StatusPill";
 import { useUploads } from "./UploadManager";
+import { MoveModal } from "./MoveModal";
 import { ShareModal } from "./ShareModal";
 
 type F = { id: string; name: string; parentId: string | null };
@@ -478,13 +479,20 @@ export function AssetBrowser({
         )}
       </Modal>
       <MoveModal
-        ids={moveIds}
-        folders={folders}
+        open={!!moveIds}
+        title={`Di chuyển ${moveIds?.length ?? 0} file tới…`}
+        currentProjectId={projectId}
         onClose={() => setMoveIds(null)}
-        onMove={async (folderId) => {
+        onMove={async (t) => {
           const ids = moveIds!;
           setMoveIds(null);
-          await bulk("move", ids, { folderId }, `Đã di chuyển ${ids.length} file`);
+          const other = t.projectId !== projectId;
+          await bulk(
+            "move",
+            ids,
+            { folderId: t.folderId, ...(other ? { toProjectId: t.projectId } : {}) },
+            other ? `Đã chuyển ${ids.length} file sang "${t.projectName}"` : `Đã di chuyển ${ids.length} file`,
+          );
         }}
       />
       <ShareModal
@@ -525,54 +533,5 @@ function RenameForm({ asset, onDone, onCancel }: { asset: AssetDTO; onDone: () =
         <button className="btn-primary">Lưu</button>
       </div>
     </form>
-  );
-}
-
-function MoveModal({
-  ids,
-  folders,
-  onClose,
-  onMove,
-}: {
-  ids: string[] | null;
-  folders: F[];
-  onClose: () => void;
-  onMove: (folderId: string | null) => void;
-}) {
-  const [target, setTarget] = useState<string | null>(null);
-  const rows: { f: F | null; depth: number }[] = [{ f: null, depth: 0 }];
-  const walk = (parent: string | null, depth: number) => {
-    for (const f of folders.filter((x) => x.parentId === parent).sort((a, b) => a.name.localeCompare(b.name, "vi"))) {
-      rows.push({ f, depth });
-      walk(f.id, depth + 1);
-    }
-  };
-  walk(null, 1);
-  return (
-    <Modal open={!!ids} onClose={onClose} title={`Di chuyển ${ids?.length ?? 0} file tới…`}>
-      <div className="mb-4 max-h-72 overflow-y-auto rounded-lg border border-line p-1">
-        {rows.map(({ f, depth }) => (
-          <button
-            key={f?.id ?? "root"}
-            onClick={() => setTarget(f?.id ?? null)}
-            className={cn(
-              "flex w-full items-center rounded-md py-1.5 pr-2 text-left text-sm",
-              target === (f?.id ?? null) ? "bg-accent/15 text-fg" : "text-mut hover:bg-panel-2",
-            )}
-            style={{ paddingLeft: 8 + depth * 16 }}
-          >
-            {f ? f.name : "Thư mục gốc của project"}
-          </button>
-        ))}
-      </div>
-      <div className="flex justify-end gap-2">
-        <button className="btn-ghost" onClick={onClose}>
-          Huỷ
-        </button>
-        <button className="btn-primary" onClick={() => onMove(target)}>
-          Di chuyển
-        </button>
-      </div>
-    </Modal>
   );
 }

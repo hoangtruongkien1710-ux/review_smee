@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { HttpError, requireUser } from "@/lib/auth";
 import { requireProject } from "@/lib/access";
 import { sync } from "@/lib/drive-sync";
+import { moveFolderToProject } from "@/lib/move";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,6 +17,8 @@ async function load(id: string) {
 const Body = z.object({
   name: z.string().trim().min(1, "Tên thư mục trống").max(120).optional(),
   parentId: z.string().nullable().optional(),
+  /** Chuyển thư mục (kèm toàn bộ file bên trong) sang project khác; parentId là thư mục đích trong project đó */
+  projectId: z.string().optional(),
 });
 
 export const PATCH = route<Ctx>(async (req, { params }) => {
@@ -24,6 +27,12 @@ export const PATCH = route<Ctx>(async (req, { params }) => {
   const f = await load(id);
   await requireProject(me, f.projectId, "EDITOR");
   const b = await parse(req, Body);
+  if (b.projectId && b.projectId !== f.projectId) {
+    await requireProject(me, b.projectId, "EDITOR");
+    await moveFolderToProject(id, b.projectId, b.parentId ?? null);
+    await prisma.project.updateMany({ where: { id: { in: [f.projectId, b.projectId] } }, data: { updatedAt: new Date() } });
+    return { ok: true };
+  }
   if (b.parentId !== undefined && b.parentId !== null) {
     // không cho chuyển thư mục vào chính nó hoặc thư mục con của nó
     let cur: string | null = b.parentId;
